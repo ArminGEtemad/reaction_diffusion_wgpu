@@ -64,7 +64,7 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(st) = &mut self.state {
-                    let _ = st.render();
+                    let _ = st.compute_and_render();
                 }
             }
             _ => {}
