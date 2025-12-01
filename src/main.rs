@@ -8,6 +8,8 @@ use winit::{
 
 use crate::state::State;
 
+mod gpu_resources;
+mod rd_system;
 mod state;
 
 fn main() {
@@ -28,7 +30,7 @@ struct App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let attributes = Window::default_attributes()
-            .with_title("Reation-Diffusion in WGPU")
+            .with_title("Reaction-Diffusion in WGPU")
             .with_inner_size(LogicalSize::new(970.0_f64, 600.0_f64)); // golden ratio :)
         let window = event_loop
             .create_window(attributes)
@@ -64,7 +66,7 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(st) = &mut self.state {
-                    let _ = st.compute_and_render();
+                    let _ = st.render();
                 }
             }
             _ => {}
