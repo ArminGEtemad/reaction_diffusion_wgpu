@@ -12,6 +12,9 @@ use crate::gpu_resources::{FrameContext, GpuResource};
 const HEIGHT: u32 = 1280;
 const WIDTH: u32 = 720;
 
+const WG_X: u32 = 8;
+const WG_Y: u32 = 8;
+
 // time
 // this lives in group 0 binding 0
 #[repr(C)] // format expected by the gpu
@@ -39,8 +42,12 @@ pub struct ReactionDiffusionSystem {
 
     // compute
     pub _compute_bgl: BindGroupLayout,
-    pub compute_bg: BindGroup,
+    pub compute_bg_1_to_2: BindGroup,
+    pub compute_bg_2_to_1: BindGroup,
     pub compute_pipeline: ComputePipeline,
+
+    // ping or pong :)
+    pub use_1_as_source: bool,
 }
 
 impl ReactionDiffusionSystem {
@@ -186,28 +193,86 @@ impl ReactionDiffusionSystem {
         });
 
         // compute
-        let compute_bgl = device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Compute Bing Group Layout"),
-            entries: &[BindGroupLayoutEntry {
-                // time uniform buffer binding 0
-                binding: 0,
-                visibility: ShaderStages::COMPUTE,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(std::mem::size_of::<TimeUniform>() as u64),
-                },
-                count: None,
-            }],
-        });
+        let compute_bgl =
+            device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("Compute Bing Group Layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        // time uniform buffer binding 0
+                        binding: 0,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: NonZeroU64::new(
+                                std::mem::size_of::<TimeUniform>() as u64
+                            ),
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        // source (sampled)
+                        binding: 1,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        // dst (storage)
+                        binding: 2,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::StorageTexture {
+                            access: StorageTextureAccess::WriteOnly,
+                            format: TextureFormat::Rgba32Float,
+                            view_dimension: TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                ],
+            });
 
-        let compute_bg = device_m.create_bind_group(&BindGroupDescriptor {
+        // write to 2
+        let compute_bg_1_to_2 = device_m.create_bind_group(&BindGroupDescriptor {
             label: Some("Compute Bind Group"),
             layout: &compute_bgl,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: time_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: time_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&texture_view_1),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::TextureView(&texture_view_2),
+                },
+            ],
+        });
+
+        // write to 1
+        let compute_bg_2_to_1 = device_m.create_bind_group(&BindGroupDescriptor {
+            label: Some("Compute Bind Group"),
+            layout: &compute_bgl,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: time_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&texture_view_2),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::TextureView(&texture_view_1),
+                },
+            ],
         });
 
         let compute_pipeline_layout = device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -237,8 +302,11 @@ impl ReactionDiffusionSystem {
             sampler,
 
             _compute_bgl: compute_bgl,
-            compute_bg,
+            compute_bg_1_to_2,
+            compute_bg_2_to_1,
             compute_pipeline,
+
+            use_1_as_source: true,
         }
     }
 
@@ -255,6 +323,13 @@ impl ReactionDiffusionSystem {
             .queue
             .write_buffer(&self.time_buffer, 0, bytemuck::bytes_of(&time_uniform));
 
+        // ping or pong?
+        let compute_bg = if self.use_1_as_source {
+            &self.compute_bg_1_to_2
+        } else {
+            &self.compute_bg_2_to_1
+        };
+
         // compute pass scope
         {
             let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
@@ -263,10 +338,11 @@ impl ReactionDiffusionSystem {
             });
 
             cpass.set_pipeline(&self.compute_pipeline);
-            cpass.set_bind_group(0, &self.compute_bg, &[]);
+            cpass.set_bind_group(0, compute_bg, &[]);
 
-            let workgroup = (256 + 255) / 256; // TODO (WG + (N - 1) / N) Need to be changed later accordigly
-            cpass.dispatch_workgroups(workgroup, 1, 1);
+            let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
+            let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
+            cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
         }
 
         // render pass scope
