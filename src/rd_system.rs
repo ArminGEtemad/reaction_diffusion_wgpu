@@ -8,7 +8,12 @@ use wgpu::{
 
 use crate::gpu_resources::{FrameContext, GpuResource};
 
+// Pixels
+const HEIGHT: u32 = 1280;
+const WIDTH: u32 = 720;
+
 // time
+// this lives in group 0 binding 0
 #[repr(C)] // format expected by the gpu
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct TimeUniform {
@@ -22,6 +27,15 @@ pub struct ReactionDiffusionSystem {
     pub time_buffer: Buffer,
     pub start_instant: Instant,
     pub last_time: f32,
+
+    // texture source lives in group 0 binding 1
+    // using two textures one reads while other writes
+    // then the roles change
+    pub texture_source_1: Texture,
+    pub texture_source_2: Texture,
+    pub texture_view_1: TextureView,
+    pub texture_view_2: TextureView,
+    pub sampler: Sampler,
 
     // compute
     pub _compute_bgl: BindGroupLayout,
@@ -48,6 +62,122 @@ impl ReactionDiffusionSystem {
 
         let start_instant = Instant::now();
         let last_time: f32 = 0.0;
+
+        // create textures
+        let texture_desc = TextureDescriptor {
+            label: Some("Texture Descriptor"),
+            size: Extent3d {
+                width: WIDTH,
+                height: HEIGHT,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba32Float,
+            usage: TextureUsages::STORAGE_BINDING
+                | TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST,
+            view_formats: &[],
+        };
+
+        let texture_source_1 = device_m.create_texture(&TextureDescriptor {
+            label: Some("Texture Descriptor 1"),
+            ..texture_desc.clone()
+        });
+
+        let texture_source_2 = device_m.create_texture(&TextureDescriptor {
+            label: Some("Texture Descriptor 2"),
+            ..texture_desc // passing ownership since we don't need it anymore
+        });
+
+        let texture_view_1 = texture_source_1.create_view(&TextureViewDescriptor::default());
+        let texture_view_2 = texture_source_2.create_view(&TextureViewDescriptor::default());
+
+        let sampler = device_m.create_sampler(&SamplerDescriptor {
+            label: Some("Sampler Descriptor"),
+            address_mode_u: AddressMode::ClampToEdge,
+            address_mode_v: AddressMode::ClampToEdge,
+            address_mode_w: AddressMode::ClampToEdge,
+            mag_filter: FilterMode::Nearest,
+            min_filter: FilterMode::Nearest,
+            mipmap_filter: FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        // initialize a blob in the middle
+        // TODO make a separate file for blob
+        let mut data = vec![0.0_f32; (WIDTH * HEIGHT * 4) as usize]; // each pixel has 4 values RGBA
+
+        // loop over all the pixels
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                let pixel_idx = ((y * WIDTH + x) * 4) as usize;
+
+                // element U everywhere
+                // element V only in blob
+                let u = 1.0_f32;
+                let mut v = 0.0_f32;
+
+                // blob in the center for element V
+                let center_x = WIDTH as i32 / 2;
+                let center_y = HEIGHT as i32 / 2;
+
+                let dist_x = x as i32 - center_x;
+                let dist_y = y as i32 - center_y;
+
+                if dist_x.abs() * dist_x.abs() + dist_y.abs() * dist_y.abs() < 100 {
+                    // TODO check out standard initializations
+                    v = 1.0; // add element V to the area
+                }
+
+                // write the data to the channels
+                data[pixel_idx + 0] = u;
+                data[pixel_idx + 1] = v;
+                data[pixel_idx + 2] = 0.0;
+                data[pixel_idx + 3] = 1.0;
+            }
+        }
+
+        let data_bytes: &[u8] = bytemuck::cast_slice(&data);
+
+        let layout = TexelCopyBufferLayout {
+            offset: 0,
+            // RGBA32Float = 4 channel * 4 byte per pixel
+            bytes_per_row: Some(4 * 4 * WIDTH),
+            rows_per_image: Some(HEIGHT),
+        };
+
+        let extent = Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        };
+
+        // queue source 1
+        gpu_res.queue.write_texture(
+            TexelCopyTextureInfo {
+                texture: &texture_source_1,
+                mip_level: 0,
+                origin: Origin3d::ZERO,
+                aspect: TextureAspect::All,
+            },
+            data_bytes,
+            layout,
+            extent,
+        );
+        // queue source 2
+        gpu_res.queue.write_texture(
+            TexelCopyTextureInfo {
+                texture: &texture_source_2,
+                mip_level: 0,
+                origin: Origin3d::ZERO,
+                aspect: TextureAspect::All,
+            },
+            data_bytes,
+            layout,
+            extent,
+        );
 
         // shader modules
         let compute_shader = device_m.create_shader_module(ShaderModuleDescriptor {
@@ -99,6 +229,12 @@ impl ReactionDiffusionSystem {
             time_buffer,
             start_instant,
             last_time,
+
+            texture_source_1,
+            texture_source_2,
+            texture_view_1,
+            texture_view_2,
+            sampler,
 
             _compute_bgl: compute_bgl,
             compute_bg,
