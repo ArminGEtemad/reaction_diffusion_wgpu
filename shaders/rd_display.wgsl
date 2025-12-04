@@ -14,7 +14,7 @@ struct VSOut {
 fn vs_main(@builtin(vertex_index) vid : u32) -> VSOut {
     var pos = array<vec2<f32>, 3> (
         // one oversized triangle
-        vec2<f32>(-1.0, 1.0),
+        vec2<f32>(-1.0, -1.0),
         vec2<f32>(3.0, -1.0),
         vec2<f32>(-1.0, 3.0),
     );
