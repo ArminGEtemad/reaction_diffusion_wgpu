@@ -42,7 +42,7 @@ fn laplacian(texture: texture_2d<f32>, x_y: vec2<i32>) -> vec2<f32> {
     return laplace;
 }
 
-@compute @workgroup_size(8, 8)
+@compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) gid : vec3<u32>) { 
     let dims = textureDimensions(dst_texture);
     let dt = u_time.dt;

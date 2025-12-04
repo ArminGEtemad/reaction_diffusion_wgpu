@@ -31,7 +31,7 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let attributes = Window::default_attributes()
             .with_title("Reaction-Diffusion in WGPU")
-            .with_inner_size(LogicalSize::new(970.0_f64, 600.0_f64)); // golden ratio :)
+            .with_inner_size(LogicalSize::new(970.0_f64, 970.0_f64));
         let window = event_loop
             .create_window(attributes)
             .expect("Failed to create window!");

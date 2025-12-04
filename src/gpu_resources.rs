@@ -48,7 +48,7 @@ impl GpuResource {
 
         let surface_m_capab = surface_m.get_capabilities(&adapter_m); // needed for format
         // needed for configuration later
-        let surfacr_m_format = surface_m_capab
+        let surface_m_format = surface_m_capab
             .formats
             .iter()
             .copied()
@@ -62,7 +62,7 @@ impl GpuResource {
 
         let config_m = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
-            format: surfacr_m_format,
+            format: surface_m_format,
             width: size.width.max(1),
             height: size.height.max(1),
             present_mode: PresentMode::Fifo, // first in first out
@@ -111,6 +111,10 @@ impl GpuResource {
             view,
             encoder,
         })
+    }
+
+    pub fn surface_format(&self) -> TextureFormat {
+        self.config.format
     }
 
     pub fn submit_frame(&self, frame: FrameContext) {

@@ -10,10 +10,10 @@ use crate::gpu_resources::{FrameContext, GpuResource};
 
 // Pixels
 const HEIGHT: u32 = 1280;
-const WIDTH: u32 = 720;
+const WIDTH: u32 = 1280;
 
-const WG_X: u32 = 8;
-const WG_Y: u32 = 8;
+const WG_X: u32 = 16;
+const WG_Y: u32 = 16;
 
 // time
 // this lives in group 0 binding 0
@@ -45,6 +45,12 @@ pub struct ReactionDiffusionSystem {
     pub compute_bg_1_to_2: BindGroup,
     pub compute_bg_2_to_1: BindGroup,
     pub compute_pipeline: ComputePipeline,
+
+    // rendering
+    pub render_bgl: BindGroupLayout,
+    pub render_bg_from_1: BindGroup,
+    pub render_bg_from_2: BindGroup,
+    pub render_pipeline: RenderPipeline,
 
     // ping or pong :)
     pub use_1_as_source: bool,
@@ -188,8 +194,12 @@ impl ReactionDiffusionSystem {
 
         // shader modules
         let compute_shader = device_m.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Compute Shder Module"),
+            label: Some("Compute Shader Module"),
             source: ShaderSource::Wgsl(include_str!("../shaders/rd_compute.wgsl").into()),
+        });
+        let render_shader = device_m.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Render Shader Module"),
+            source: ShaderSource::Wgsl(include_str!("../shaders/rd_display.wgsl").into()),
         });
 
         // compute
@@ -290,6 +300,93 @@ impl ReactionDiffusionSystem {
             cache: None,
         });
 
+        // rendering
+        let render_bgl = device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Render Bind Group Layout"),
+            entries: &[
+                BindGroupLayoutEntry {
+                    // rd texture
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float { filterable: false },
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    // rd sampler
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+            ],
+        });
+
+        let render_bg_from_1 = device_m.create_bind_group(&BindGroupDescriptor {
+            label: Some("Rendering from BG from  source 1"),
+            layout: &render_bgl,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&texture_view_1),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        let render_bg_from_2 = device_m.create_bind_group(&BindGroupDescriptor {
+            label: Some("Rendering from BG from  source 2"),
+            layout: &render_bgl,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&texture_view_2),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        let render_pipeline_layout = device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some("Rendering Pipeline Layout"),
+            bind_group_layouts: &[&render_bgl],
+            push_constant_ranges: &[],
+        });
+
+        let render_pipeline = device_m.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("Rendering Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: VertexState {
+                module: &render_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            primitive: PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: MultisampleState::default(),
+            fragment: Some(FragmentState {
+                module: &render_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: PipelineCompilationOptions::default(),
+                targets: &[Some(ColorTargetState {
+                    format: gpu_res.surface_format(),
+                    blend: Some(BlendState::REPLACE),
+                    write_mask: ColorWrites::ALL,
+                })],
+            }),
+            multiview: None,
+            cache: None,
+        });
+
         Self {
             time_buffer,
             start_instant,
@@ -306,6 +403,11 @@ impl ReactionDiffusionSystem {
             compute_bg_2_to_1,
             compute_pipeline,
 
+            render_bgl,
+            render_bg_from_1,
+            render_bg_from_2,
+            render_pipeline,
+
             use_1_as_source: true,
         }
     }
@@ -313,9 +415,9 @@ impl ReactionDiffusionSystem {
     // resposible for updating time and render pass / compute pass
     pub fn compute_and_render_pass(&mut self, gpu_res: &GpuResource, frame: &mut FrameContext) {
         // update dt
-        let now = self.start_instant.elapsed().as_secs_f32();
-        let dt = (now - self.last_time).max(0.0);
-        self.last_time = now;
+        //let now = self.start_instant.elapsed().as_secs_f32();
+        let dt = 0.5; //(now - self.last_time).max(0.0);
+        //self.last_time = now;
 
         let time_uniform = TimeUniform { dt, _pad: [0.0; 3] };
 
@@ -324,10 +426,10 @@ impl ReactionDiffusionSystem {
             .write_buffer(&self.time_buffer, 0, bytemuck::bytes_of(&time_uniform));
 
         // ping or pong?
-        let compute_bg = if self.use_1_as_source {
-            &self.compute_bg_1_to_2
+        let (compute_bg, render_bg) = if self.use_1_as_source {
+            (&self.compute_bg_1_to_2, &self.render_bg_from_2)
         } else {
-            &self.compute_bg_2_to_1
+            (&self.compute_bg_2_to_1, &self.render_bg_from_1)
         };
 
         // compute pass scope
@@ -347,13 +449,13 @@ impl ReactionDiffusionSystem {
 
         // render pass scope
         {
-            let _rpass = frame.encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut rpass = frame.encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &frame.view,
                     resolve_target: None,
                     ops: Operations {
-                        load: LoadOp::Clear(Color::BLUE),
+                        load: LoadOp::Clear(Color::BLACK),
                         store: StoreOp::Store,
                     },
                 })],
@@ -361,6 +463,12 @@ impl ReactionDiffusionSystem {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+
+            rpass.set_pipeline(&self.render_pipeline);
+            rpass.set_bind_group(0, render_bg, &[]);
+            rpass.draw(0..3, 0..1);
         }
+
+        self.use_1_as_source = !self.use_1_as_source;
     }
 }
