@@ -11,6 +11,7 @@ use crate::state::State;
 mod gpu_resources;
 mod rd_system;
 mod state;
+mod shader_watcher;
 
 fn main() {
     let event_loop_m = EventLoop::new().expect("Failed to create Event Loop!");
