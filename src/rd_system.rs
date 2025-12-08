@@ -16,11 +16,11 @@ const WG_X: u32 = 16;
 const WG_Y: u32 = 16;
 
 // helper function to have a dynamical shader address
-// so the source is not "hard coded" in the compile time 
+// so the source is not "hard coded" in the compile time
 fn load_ablsolute_path(relative_path: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative_path); // making absolute path
-    fs::read_to_string(&path).unwrap_or_else(|e| panic!("Failed to read shader {:?}\nError: {}", path, e))
-
+    fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("Failed to read shader {:?}\nError: {}", path, e))
 }
 
 // time
@@ -49,7 +49,7 @@ pub struct ReactionDiffusionSystem {
     pub sampler: Sampler,
 
     // compute
-    pub _compute_bgl: BindGroupLayout,
+    pub compute_bgl: BindGroupLayout,
     pub compute_bg_1_to_2: BindGroup,
     pub compute_bg_2_to_1: BindGroup,
     pub compute_pipeline: ComputePipeline,
@@ -411,7 +411,7 @@ impl ReactionDiffusionSystem {
             texture_view_2,
             sampler,
 
-            _compute_bgl: compute_bgl,
+            compute_bgl,
             compute_bg_1_to_2,
             compute_bg_2_to_1,
             compute_pipeline,
@@ -483,5 +483,90 @@ impl ReactionDiffusionSystem {
         }
 
         self.use_1_as_source = !self.use_1_as_source;
+    }
+
+    // reload and rebuild pipelines if shaders are changed
+    // TODO This makes this script too long. Should I refactor it or make a script for it?
+    fn reload_compute_pipeline(&mut self, gpu_res: &GpuResource) {
+        let compute_shader_path = load_ablsolute_path("shaders/rd_compute.wgsl");
+        let compute_shader = gpu_res.device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Compute Shader (Rebuilding)"),
+            source: ShaderSource::Wgsl(compute_shader_path.into()),
+        });
+
+        // "new layout" it is the same same but different (after changes in the shader)
+        let compute_pipeline_layout =
+            gpu_res
+                .device
+                .create_pipeline_layout(&PipelineLayoutDescriptor {
+                    label: Some("Compute Pipeline Layout (Rebuilding"),
+                    bind_group_layouts: &[&self.compute_bgl],
+                    push_constant_ranges: &[],
+                });
+
+        self.compute_pipeline =
+            gpu_res
+                .device
+                .create_compute_pipeline(&ComputePipelineDescriptor {
+                    label: Some("Compute Pipeline (Rebuilding)"),
+                    layout: Some(&compute_pipeline_layout),
+                    module: &compute_shader,
+                    entry_point: Some("main"),
+                    compilation_options: PipelineCompilationOptions::default(),
+                    cache: None,
+                });
+    }
+
+    fn reload_render_pipeline(&mut self, gpu_res: &GpuResource) {
+        let render_shader_path = load_ablsolute_path("shaders/rd_display.wgsl");
+        let render_shader = gpu_res.device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Render Shader (Rebuilding)"),
+            source: ShaderSource::Wgsl(render_shader_path.into()),
+        });
+
+        let render_pipeline_layout =
+            gpu_res
+                .device
+                .create_pipeline_layout(&PipelineLayoutDescriptor {
+                    label: Some("Render Pipeline Layout (Rebuilding)"),
+                    bind_group_layouts: &[&self.render_bgl],
+                    push_constant_ranges: &[],
+                });
+
+        self.render_pipeline = gpu_res
+            .device
+            .create_render_pipeline(&RenderPipelineDescriptor {
+                label: Some("Render Pipeline (Rebuilding)"),
+                layout: Some(&render_pipeline_layout),
+                vertex: VertexState {
+                    module: &render_shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: PipelineCompilationOptions::default(),
+                    buffers: &[],
+                },
+                primitive: PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: MultisampleState::default(),
+                fragment: Some(FragmentState {
+                    module: &render_shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: PipelineCompilationOptions::default(),
+                    targets: &[Some(ColorTargetState {
+                        format: gpu_res.surface_format(),
+                        blend: Some(BlendState::REPLACE),
+                        write_mask: ColorWrites::ALL,
+                    })],
+                }),
+                multiview: None,
+                cache: None,
+            });
+    }
+
+    // rebuild
+    pub fn rebuild_pipeline(&mut self, gpu_res: &GpuResource) {
+        println!("Rebuilding Pipelines (Hot Reload)");
+        self.reload_compute_pipeline(gpu_res);
+        self.reload_render_pipeline(gpu_res);
+        println!("Pipelines Fully Reloaded (Hot Reload)");
     }
 }
