@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use std::{num::NonZeroU64, time::Instant};
+use std::{fs, num::NonZeroU64, path::PathBuf, time::Instant};
 
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -14,6 +14,14 @@ const WIDTH: u32 = 1280;
 
 const WG_X: u32 = 16;
 const WG_Y: u32 = 16;
+
+// helper function to have a dynamical shader address
+// so the source is not "hard coded" in the compile time 
+fn load_ablsolute_path(relative_path: &str) -> String {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative_path); // making absolute path
+    fs::read_to_string(&path).unwrap_or_else(|e| panic!("Failed to read shader {:?}\nError: {}", path, e))
+
+}
 
 // time
 // this lives in group 0 binding 0
@@ -193,13 +201,18 @@ impl ReactionDiffusionSystem {
         );
 
         // shader modules
+
+        // a run time shader loader instead of compile time which makes the program ready for hot reload
+        let compute_shader_path = load_ablsolute_path("shaders/rd_compute.wgsl");
+        let render_shader_path = load_ablsolute_path("shaders/rd_display.wgsl");
+
         let compute_shader = device_m.create_shader_module(ShaderModuleDescriptor {
             label: Some("Compute Shader Module"),
-            source: ShaderSource::Wgsl(include_str!("../shaders/rd_compute.wgsl").into()),
+            source: ShaderSource::Wgsl(compute_shader_path.into()),
         });
         let render_shader = device_m.create_shader_module(ShaderModuleDescriptor {
             label: Some("Render Shader Module"),
-            source: ShaderSource::Wgsl(include_str!("../shaders/rd_display.wgsl").into()),
+            source: ShaderSource::Wgsl(render_shader_path.into()),
         });
 
         // compute
