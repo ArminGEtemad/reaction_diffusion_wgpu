@@ -5,9 +5,10 @@ A GPU-accelerated reaction-diffusion simulator written in Rust using `wgpu` and 
 This project is part of an ongoing learning journey into compute shaders, real-time simulations, and graphics programming. The goal is to build a flexible simulation playground, explore visual patterns.
 
 ## Second Focus
-After the fist focus is done, I want to focus on what i planned. 
 
-- [ ] Hot reload
+After the fist focus is done, I want to focus on what i planned.
+
+- [x] Hot reload
 - [ ] Interactivity (Brush, Eraser, Pause, Play)
 - [ ] UI to change color, parameters in real time
 
