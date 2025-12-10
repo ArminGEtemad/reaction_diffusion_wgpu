@@ -29,14 +29,16 @@ fn vs_main(@builtin(vertex_index) vid : u32) -> VSOut {
 fn color_pallette(u: f32, v: f32) -> vec3<f32> {
 
     // TODO make a nice color pallette!
-    let a = vec3<f32>(0.1, 0.9, 0.5);
-    let b = vec3<f32>(0.5, 0.3, 0.7);
+    let a = vec3<f32>(0.1, 0.7, 0.6);
+    let b = vec3<f32>(1.0, 0.5, 0.1);
+    let c = vec3<f32>(0.8, 0.2, 0.9);
+    let d = vec3<f32>(0.1, 0.1, 0.9);
 
-    let c = clamp(u - v, 0.0, 1.0);
+    let cl = clamp(u - v, 0.0, 1.0);
 
     // TODO maybe the color pallette changes over time
     // but we need a uniform binding for time here
-    return cos(2.0 * (a * c + b));
+    return d + c * cos(2.0 * (a * cl + b));
 }
 
 @fragment
