@@ -24,7 +24,7 @@ fn load_ablsolute_path(relative_path: &str) -> String {
 }
 
 // time
-// this lives in group 0 binding 0
+// this lives in group 0 binding 0 (RD shader)
 #[repr(C)] // format expected by the gpu
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct TimeUniform {
@@ -32,14 +32,33 @@ struct TimeUniform {
     dt: f32,        // 4 byte
     _pad: [f32; 3], // 12 byte
 }
+
+// Brush
+// this lives in group 0 binding 0 (brush shader)
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct BrushUniform {
+    pub c_x: f32,    // 4 byte
+    pub c_y: f32,    // 4 byte
+    pub radius: f32, // 4 byte
+    pub _pad: f32,   // 4 byte for 16 byte alignment
+}
+
 // Communication between the system and GPU
 pub struct ReactionDiffusionSystem {
     // uniform
     pub time_buffer: Buffer,
-    pub start_instant: Instant,
-    pub last_time: f32,
+    pub _start_instant: Instant,
+    pub _last_time: f32,
 
-    // texture source lives in group 0 binding 1
+    // brush
+    pub brush_buffer: Buffer,
+    pub brush_bgl: BindGroupLayout,
+    pub brush_bg_to_source_1: BindGroup, // brush writes sometimes into ping
+    pub brush_bg_to_source_2: BindGroup, // brush writes sometimes into pong
+    pub brush_pipeline: ComputePipeline,
+
+    // texture source lives in group 0 binding 1 (display)
     // using two textures one reads while other writes
     // then the roles change
     pub texture_source_1: Texture,
@@ -126,6 +145,21 @@ impl ReactionDiffusionSystem {
             ..Default::default()
         });
 
+        // initializing brush
+        // TODO where do I initialize what could be important
+        let brush_uniform = BrushUniform {
+            c_x: 0.0,
+            c_y: 0.0,
+            radius: 0.0,
+            _pad: 0.0,
+        };
+
+        let brush_buffer = device_m.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Brush Uniform Buffer"),
+            contents: bytemuck::bytes_of(&brush_uniform),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
         // initialize a blob in the middle
         // TODO make a separate file for blob
         let mut data = vec![0.0_f32; (WIDTH * HEIGHT * 4) as usize]; // each pixel has 4 values RGBA
@@ -203,9 +237,14 @@ impl ReactionDiffusionSystem {
         // shader modules
 
         // a run time shader loader instead of compile time which makes the program ready for hot reload
+        let brush_shader_path = load_ablsolute_path("shaders/brush_compute.wgsl");
         let compute_shader_path = load_ablsolute_path("shaders/rd_compute.wgsl");
         let render_shader_path = load_ablsolute_path("shaders/rd_display.wgsl");
 
+        let brush_shader = device_m.create_shader_module(ShaderModuleDescriptor {
+            label: Some("Brush Shader Module"),
+            source: ShaderSource::Wgsl(brush_shader_path.into()),
+        });
         let compute_shader = device_m.create_shader_module(ShaderModuleDescriptor {
             label: Some("Compute Shader Module"),
             source: ShaderSource::Wgsl(compute_shader_path.into()),
@@ -215,10 +254,86 @@ impl ReactionDiffusionSystem {
             source: ShaderSource::Wgsl(render_shader_path.into()),
         });
 
-        // compute
+        // brush compute
+        let brush_bgl = device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Brush Bind Group Layout"),
+            entries: &[
+                BindGroupLayoutEntry {
+                    // brush uniform
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(
+                            std::mem::size_of::<BrushUniform>() as u64
+                        ),
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    // texture
+                    binding: 1,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::StorageTexture {
+                        access: StorageTextureAccess::ReadWrite,
+                        format: TextureFormat::Rgba32Float,
+                        view_dimension: TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let brush_bg_to_source_1 = device_m.create_bind_group(&BindGroupDescriptor {
+            label: Some("Brush Bind Group 1"),
+            layout: &brush_bgl,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: brush_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&texture_view_1),
+                },
+            ],
+        });
+
+        let brush_bg_to_source_2 = device_m.create_bind_group(&BindGroupDescriptor {
+            label: Some("Brush Bing Group 2"),
+            layout: &brush_bgl,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: brush_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&texture_view_2),
+                },
+            ],
+        });
+
+        let brush_pipeline_layout = device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some("Brush Pipeline Layout"),
+            bind_group_layouts: &[&brush_bgl],
+            push_constant_ranges: &[],
+        });
+
+        let brush_pipeline = device_m.create_compute_pipeline(&ComputePipelineDescriptor {
+            label: Some("Brush Pipeline"),
+            layout: Some(&brush_pipeline_layout),
+            module: &brush_shader,
+            entry_point: Some("main"),
+            compilation_options: PipelineCompilationOptions::default(),
+            cache: None,
+        });
+
+        // RD compute
         let compute_bgl =
             device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Compute Bing Group Layout"),
+                label: Some("Compute Bind Group Layout"),
                 entries: &[
                     BindGroupLayoutEntry {
                         // time uniform buffer binding 0
@@ -402,8 +517,14 @@ impl ReactionDiffusionSystem {
 
         Self {
             time_buffer,
-            start_instant,
-            last_time,
+            _start_instant: start_instant,
+            _last_time: last_time,
+
+            brush_buffer,
+            brush_bgl,
+            brush_bg_to_source_1,
+            brush_bg_to_source_2,
+            brush_pipeline,
 
             texture_source_1,
             texture_source_2,
@@ -425,13 +546,41 @@ impl ReactionDiffusionSystem {
         }
     }
 
+    pub fn set_brush_parameters(&self, gpu_res: &GpuResource, brush_uniform: &BrushUniform) {
+        gpu_res
+            .queue
+            .write_buffer(&self.brush_buffer, 0, bytemuck::bytes_of(brush_uniform));
+    }
+
     // resposible for updating time and render pass / compute pass
     pub fn compute_and_render_pass(&mut self, gpu_res: &GpuResource, frame: &mut FrameContext) {
+        // ping pong brush
+        let brush_bg = if self.use_1_as_source {
+            &self.brush_bg_to_source_1
+        } else {
+            &self.brush_bg_to_source_2
+        };
+
+        {
+            let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("Brush Compute Pass"),
+                timestamp_writes: None,
+            });
+
+            cpass.set_pipeline(&self.brush_pipeline);
+            cpass.set_bind_group(0, brush_bg, &[]);
+
+            let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
+            let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
+            cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
+        }
+
         // update dt
         //let now = self.start_instant.elapsed().as_secs_f32();
         let dt = 0.5; //(now - self.last_time).max(0.0);
         //self.last_time = now;
 
+        // TODO make separate functions for these... it is getting out of control
         let time_uniform = TimeUniform { dt, _pad: [0.0; 3] };
 
         gpu_res
@@ -568,5 +717,10 @@ impl ReactionDiffusionSystem {
         self.reload_compute_pipeline(gpu_res);
         self.reload_render_pipeline(gpu_res);
         println!("Pipelines Fully Reloaded (Hot Reload)");
+    }
+
+    // a helper function for WIDTH and WEIGHT
+    pub fn rd_size(&self) -> (u32, u32) {
+        (WIDTH, HEIGHT)
     }
 }
