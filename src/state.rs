@@ -1,6 +1,7 @@
 use crate::{
+    InputState,
     gpu_resources::{FrameContext, GpuResource},
-    rd_system::ReactionDiffusionSystem,
+    rd_system::{BrushUniform, ReactionDiffusionSystem},
     shader_watcher::ShaderWatcher,
 };
 use wgpu::SurfaceError;
@@ -31,12 +32,43 @@ impl State {
         self.gpu_res.resize(new_size);
     }
 
-    pub fn render(&mut self) -> Result<(), SurfaceError> {
+    pub fn render(&mut self, input: &InputState) -> Result<(), SurfaceError> {
         // is anything changed?
         while let Ok(path) = self.shader_watcher.reciever_x.try_recv() {
             println!("Shader has been changed: {:?}", path);
             self.rd_system.rebuild_pipeline(&self.gpu_res);
         }
+
+        let (w_rd, h_rd) = self.rd_system.rd_size();
+
+        // brush input
+        let mut brush_uniform = BrushUniform {
+            c_x: 0.0,
+            c_y: 0.0,
+            radius: 5.0, // TODO hardcoded now and needs to be changed in UI live
+            _pad: 0.0,
+        };
+
+        if input.mouse_down {
+            if let Some((mx, my)) = input.mouse_pos {
+                let w = self.gpu_res.size.width as f32;
+                let h = self.gpu_res.size.height as f32;
+
+                if w > 0.0 && h > 0.0 {
+                    let nx = (mx / w).clamp(0.0, 1.0);
+                    let ny = (my / h).clamp(0.0, 1.0);
+
+                    // y axis is mirrored because of different (0, 0) point
+
+                    brush_uniform.c_x = nx * w_rd as f32;
+                    brush_uniform.c_y = (1.0 - ny) * h_rd as f32;
+                }
+            }
+        }
+
+        // upload the brush uniform
+        self.rd_system
+            .set_brush_parameters(&self.gpu_res, &brush_uniform);
 
         let mut frame: FrameContext = self.gpu_res.begin_frame()?;
         self.rd_system
