@@ -1,7 +1,7 @@
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{ElementState, MouseButton, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
@@ -10,8 +10,8 @@ use crate::state::State;
 
 mod gpu_resources;
 mod rd_system;
-mod state;
 mod shader_watcher;
+mod state;
 
 fn main() {
     let event_loop_m = EventLoop::new().expect("Failed to create Event Loop!");
@@ -21,11 +21,28 @@ fn main() {
     let _ = event_loop_m.run_app(&mut app);
 }
 
-// making the Application
 #[derive(Default)]
+struct InputState {
+    mouse_pos: Option<(f32, f32)>,
+    mouse_down: bool,
+    brush_radius: f32,
+}
+
 struct App {
     window: Option<&'static Window>,
     state: Option<State>,
+    input: InputState,
+}
+
+// making the Application
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            window: None,
+            state: None,
+            input: InputState::default(),
+        }
+    }
 }
 
 impl ApplicationHandler for App {
@@ -67,8 +84,20 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(st) = &mut self.state {
-                    let _ = st.render();
+                    let _ = st.render(&self.input);
                 }
+            }
+
+            WindowEvent::CursorMoved { position, .. } => {
+                self.input.mouse_pos = Some((position.x as f32, position.y as f32));
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                if button == MouseButton::Left {
+                    self.input.mouse_down = state == ElementState::Pressed;
+                }
+                println!("Mouse Input: {:?}, {:?}", button, state);
+                println!("Mouse Position: {:?}", self.input.mouse_pos);
             }
             _ => {}
         }
