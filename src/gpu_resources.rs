@@ -34,11 +34,17 @@ impl GpuResource {
             })
             .await
             .expect("No GPU found!");
+        let adapter_m_feature = adapter_m.features();
+        let required_feature = Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
+
+        if !adapter_m_feature.contains(required_feature) {
+            panic!("Required feature not supported: {:?}", required_feature);
+        }
 
         let (device_m, queue_m) = adapter_m
             .request_device(&wgt::DeviceDescriptor {
                 label: Some("Device"),
-                required_features: Features::empty(),
+                required_features: required_feature,
                 required_limits: Limits::default(),
                 memory_hints: MemoryHints::default(),
                 trace: Trace::Off,

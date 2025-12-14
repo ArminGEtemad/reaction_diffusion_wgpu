@@ -1,8 +1,9 @@
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
+    keyboard::Key,
     window::Window,
 };
 
@@ -10,8 +11,8 @@ use crate::state::State;
 
 mod gpu_resources;
 mod rd_system;
-mod state;
 mod shader_watcher;
+mod state;
 
 fn main() {
     let event_loop_m = EventLoop::new().expect("Failed to create Event Loop!");
@@ -21,11 +22,41 @@ fn main() {
     let _ = event_loop_m.run_app(&mut app);
 }
 
-// making the Application
-#[derive(Default)]
+struct InputState {
+    mouse_pos: Option<(f32, f32)>,
+    mouse_down: bool,
+    brush_radius: f32,
+    mode: u32,
+    paused: bool,
+}
+
 struct App {
     window: Option<&'static Window>,
     state: Option<State>,
+    input: InputState,
+}
+
+// making the Application
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            window: None,
+            state: None,
+            input: InputState::default(),
+        }
+    }
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        Self {
+            mouse_pos: None,
+            mouse_down: false,
+            brush_radius: 5.0,
+            mode: 0,
+            paused: false,
+        }
+    }
 }
 
 impl ApplicationHandler for App {
@@ -67,9 +98,60 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(st) = &mut self.state {
-                    let _ = st.render();
+                    let _ = st.render(&self.input);
                 }
             }
+
+            WindowEvent::CursorMoved { position, .. } => {
+                self.input.mouse_pos = Some((position.x as f32, position.y as f32));
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                if button == MouseButton::Left {
+                    self.input.mouse_down = state == ElementState::Pressed;
+                }
+                println!("Mouse Input: {:?}, {:?}", button, state);
+                println!("Mouse Position: {:?}", self.input.mouse_pos);
+            }
+
+            // TODO test it on the laptop later
+            WindowEvent::MouseWheel { delta, .. } => {
+                let scroll_d = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y * 1.0,
+                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.05,
+                };
+
+                self.input.brush_radius = (self.input.brush_radius + scroll_d).clamp(1.0, 20.0);
+                println!("Brush radius: {:?}", self.input.brush_radius);
+            }
+
+            WindowEvent::KeyboardInput { event, .. } => {
+                match &event.logical_key {
+                    Key::Character(m) if m == "1" => {
+                        self.input.mode = 0; // add V
+                        println!("Add V Mode: {}", self.input.mode);
+                    }
+                    Key::Character(m) if m == "2" => {
+                        self.input.mode = 1; // add U
+                        println!("Add U Mode: {}", self.input.mode);
+                    }
+                    Key::Character(m) if m == "0" => {
+                        self.input.mode = 3; // erase
+                        println!("erase {}", self.input.mode);
+                    }
+
+                    // pause play
+                    Key::Character(m) if m == "p" => {
+                        if event.state == ElementState::Pressed {
+                            self.input.paused = !self.input.paused;
+                            println!("Paused: {}", self.input.paused);
+                        }
+                    }
+
+                    _ => {}
+                }
+            }
+
             _ => {}
         }
     }
