@@ -3,6 +3,7 @@ use winit::{
     dpi::LogicalSize,
     event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
+    keyboard::Key,
     window::Window,
 };
 
@@ -25,6 +26,7 @@ struct InputState {
     mouse_pos: Option<(f32, f32)>,
     mouse_down: bool,
     brush_radius: f32,
+    mode: u32,
 }
 
 struct App {
@@ -50,6 +52,7 @@ impl Default for InputState {
             mouse_pos: None,
             mouse_down: false,
             brush_radius: 5.0,
+            mode: 0,
         }
     }
 }
@@ -118,6 +121,25 @@ impl ApplicationHandler for App {
 
                 self.input.brush_radius = (self.input.brush_radius + scroll_d).clamp(1.0, 20.0);
                 println!("Brush radius: {:?}", self.input.brush_radius);
+            }
+
+            WindowEvent::KeyboardInput { event, .. } => {
+                match &event.logical_key {
+                    Key::Character(m) if m == "1" => {
+                        self.input.mode = 0; // add V
+                        println!("Add V Mode: {}", self.input.mode);
+                    }
+                    Key::Character(m) if m == "2" => {
+                        self.input.mode = 1; // add U
+                        println!("Add U Mode: {}", self.input.mode);
+                    }
+                    Key::Character(m) if m == "0" => {
+                        self.input.mode = 3; // erase
+                        println!("erase {}", self.input.mode);
+                    }
+
+                    _ => {}
+                }
             }
 
             _ => {}
