@@ -41,7 +41,7 @@ pub struct BrushUniform {
     pub c_x: f32,    // 4 byte
     pub c_y: f32,    // 4 byte
     pub radius: f32, // 4 byte
-    pub _pad: f32,   // 4 byte for 16 byte alignment
+    pub mode: u32,   // 4 byte
 }
 
 // Communication between the system and GPU
@@ -151,7 +151,7 @@ impl ReactionDiffusionSystem {
             c_x: 0.0,
             c_y: 0.0,
             radius: 0.0,
-            _pad: 0.0,
+            mode: 0,
         };
 
         let brush_buffer = device_m.create_buffer_init(&BufferInitDescriptor {
