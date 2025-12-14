@@ -27,6 +27,7 @@ struct InputState {
     mouse_down: bool,
     brush_radius: f32,
     mode: u32,
+    paused: bool,
 }
 
 struct App {
@@ -53,6 +54,7 @@ impl Default for InputState {
             mouse_down: false,
             brush_radius: 5.0,
             mode: 0,
+            paused: false,
         }
     }
 }
@@ -136,6 +138,14 @@ impl ApplicationHandler for App {
                     Key::Character(m) if m == "0" => {
                         self.input.mode = 3; // erase
                         println!("erase {}", self.input.mode);
+                    }
+
+                    // pause play
+                    Key::Character(m) if m == "p" => {
+                        if event.state == ElementState::Pressed {
+                            self.input.paused = !self.input.paused;
+                            println!("Paused: {}", self.input.paused);
+                        }
                     }
 
                     _ => {}
