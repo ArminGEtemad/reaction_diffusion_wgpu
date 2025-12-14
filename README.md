@@ -10,7 +10,9 @@ I want to work more on the code base and make it reusable for my future works (h
 
 - [ ] Render Graph
 - [ ] post-processing phases and add different views and thems
-- [ ] maybe UI?
+- [ ] maybe the user can run multiple RD systems with different parameters at the same time?
+
+There are many stuff I want to add to have a fully interactive reaction diffusion system that fill fun to use and watch as patterns evolve.
 
 ## Second Focus
 
@@ -79,6 +81,6 @@ The size of the brush can be changed using the mouse wheel. The the key `p` can 
 | p           | Pause/Play       |
 | mouse wheel | Resize the brush |
 
-## Math
+## Math and Design
 
-The math and everything I do will be explained in [here](docs).
+The math and everything I do will be explained in [here](docs). There I will explain what the ping-pong buffer is that I used. When I make the render graph, I explain why I decided to go this way with the project.
