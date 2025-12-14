@@ -1,7 +1,7 @@
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::{ElementState, MouseButton, WindowEvent},
+    event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
@@ -21,7 +21,6 @@ fn main() {
     let _ = event_loop_m.run_app(&mut app);
 }
 
-#[derive(Default)]
 struct InputState {
     mouse_pos: Option<(f32, f32)>,
     mouse_down: bool,
@@ -41,6 +40,16 @@ impl Default for App {
             window: None,
             state: None,
             input: InputState::default(),
+        }
+    }
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        Self {
+            mouse_pos: None,
+            mouse_down: false,
+            brush_radius: 5.0,
         }
     }
 }
@@ -99,6 +108,18 @@ impl ApplicationHandler for App {
                 println!("Mouse Input: {:?}, {:?}", button, state);
                 println!("Mouse Position: {:?}", self.input.mouse_pos);
             }
+
+            // TODO test it on the laptop later
+            WindowEvent::MouseWheel { delta, .. } => {
+                let scroll_d = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y * 1.0,
+                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.05,
+                };
+
+                self.input.brush_radius = (self.input.brush_radius + scroll_d).clamp(1.0, 20.0);
+                println!("Brush radius: {:?}", self.input.brush_radius);
+            }
+
             _ => {}
         }
     }
