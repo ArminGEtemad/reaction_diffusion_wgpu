@@ -9,7 +9,8 @@ This project is part of an ongoing learning journey into compute shaders, real-t
 After the fist focus is done, I want to focus on what i planned.
 
 - [x] Hot reload
-- [ ] Interactivity (Brush, Eraser, Pause, Play)
+- [x] Interactivity (Brush, Eraser, Pause, Play)
+- [ ] Add different starting blob shapes / reset
 - [ ] UI to change color, parameters in real time
 
 When these are done... I have to think about it
@@ -59,6 +60,19 @@ with a bit of change:
 
 </div>
 With parameters: DU = 0.16, DV = 0.08, FEED = 0.0645, KILL = 0.062
+
+## Interactivity
+
+There are three modes for the brush that the user can toggle in between using the keyboard keys `0`, `1` and `2`.
+The size of the brush can be changed using the mouse wheel. The the key `p` can be used to pause and play the the simulation.
+
+| Key         | What it does     |
+| ----------- | ---------------- |
+| 1           | Add element V    |
+| 2           | Add element U    |
+| 0           | Erase            |
+| p           | Pause/Play       |
+| mouse wheel | Resize the brush |
 
 ## Math
 
