@@ -50,7 +50,7 @@ impl State {
             } else {
                 0.0
             },
-            _pad: 0.0,
+            mode: input.mode,
         };
 
         if input.mouse_down {
