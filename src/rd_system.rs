@@ -553,39 +553,18 @@ impl ReactionDiffusionSystem {
     }
 
     // resposible for updating time and render pass / compute pass
-    pub fn compute_and_render_pass(&mut self, gpu_res: &GpuResource, frame: &mut FrameContext) {
+    pub fn compute_and_render_pass(
+        &mut self,
+        gpu_res: &GpuResource,
+        frame: &mut FrameContext,
+        paused: bool,
+    ) {
         // ping pong brush
         let brush_bg = if self.use_1_as_source {
             &self.brush_bg_to_source_1
         } else {
             &self.brush_bg_to_source_2
         };
-
-        {
-            let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some("Brush Compute Pass"),
-                timestamp_writes: None,
-            });
-
-            cpass.set_pipeline(&self.brush_pipeline);
-            cpass.set_bind_group(0, brush_bg, &[]);
-
-            let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
-            let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
-            cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
-        }
-
-        // update dt
-        //let now = self.start_instant.elapsed().as_secs_f32();
-        let dt = 0.5; //(now - self.last_time).max(0.0);
-        //self.last_time = now;
-
-        // TODO make separate functions for these... it is getting out of control
-        let time_uniform = TimeUniform { dt, _pad: [0.0; 3] };
-
-        gpu_res
-            .queue
-            .write_buffer(&self.time_buffer, 0, bytemuck::bytes_of(&time_uniform));
 
         // ping or pong?
         let (compute_bg, render_bg) = if self.use_1_as_source {
@@ -594,19 +573,48 @@ impl ReactionDiffusionSystem {
             (&self.compute_bg_2_to_1, &self.render_bg_from_1)
         };
 
-        // compute pass scope
-        {
-            let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some("Compute Pass"),
-                timestamp_writes: None,
-            });
+        if !paused {
+            {
+                let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("Brush Compute Pass"),
+                    timestamp_writes: None,
+                });
 
-            cpass.set_pipeline(&self.compute_pipeline);
-            cpass.set_bind_group(0, compute_bg, &[]);
+                cpass.set_pipeline(&self.brush_pipeline);
+                cpass.set_bind_group(0, brush_bg, &[]);
 
-            let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
-            let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
-            cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
+                let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
+                let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
+                cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
+            }
+            // update dt
+            //let now = self.start_instant.elapsed().as_secs_f32();
+            let dt = 0.2; //(now - self.last_time).max(0.0);
+            //self.last_time = now;
+
+            // TODO make separate functions for these... it is getting out of control
+            let time_uniform = TimeUniform { dt, _pad: [0.0; 3] };
+
+            gpu_res
+                .queue
+                .write_buffer(&self.time_buffer, 0, bytemuck::bytes_of(&time_uniform));
+
+            // compute pass scope
+            {
+                let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("Compute Pass"),
+                    timestamp_writes: None,
+                });
+
+                cpass.set_pipeline(&self.compute_pipeline);
+                cpass.set_bind_group(0, compute_bg, &[]);
+
+                let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
+                let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
+                cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
+            }
+
+            self.use_1_as_source = !self.use_1_as_source;
         }
 
         // render pass scope
@@ -630,8 +638,6 @@ impl ReactionDiffusionSystem {
             rpass.set_bind_group(0, render_bg, &[]);
             rpass.draw(0..3, 0..1);
         }
-
-        self.use_1_as_source = !self.use_1_as_source;
     }
 
     // reload and rebuild pipelines if shaders are changed
