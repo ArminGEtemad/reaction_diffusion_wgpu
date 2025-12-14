@@ -8,6 +8,7 @@ struct BrushUniform {
     c_x: f32,
     c_y: f32,
     radius: f32,
+    mode: u32,
 };
 
 @group(0) @binding(0)
@@ -42,8 +43,29 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 
     let coordinate = vec2<i32>(i32(x_u32), i32(y_u32));
     var c = textureLoad(texture_s, coordinate);
-    c.x = c.x + normal_distri;
-    c.y = c.y + normal_distri; // adding V to the area
+
+    let default_v = 0.0;
+    let default_u = 1.0;
+
+    switch brush.mode {
+        // 0 add V
+        case 0u: {
+            c.y = c.y + normal_distri;
+        }
+
+        // case 1 add U
+        case 1u: {
+            c.x = c.x + normal_distri;
+        }
+
+        case 3u: {
+            c.x = mix(c.x, default_u, normal_distri);
+            c.y = mix(c.y, default_v, normal_distri);
+        }
+
+        default : {}
+    }
+    
 
     textureStore(texture_s, coordinate, c);    
 
