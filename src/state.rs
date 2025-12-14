@@ -76,7 +76,7 @@ impl State {
 
         let mut frame: FrameContext = self.gpu_res.begin_frame()?;
         self.rd_system
-            .compute_and_render_pass(&self.gpu_res, &mut frame);
+            .compute_and_render_pass(&self.gpu_res, &mut frame, input.paused);
         self.gpu_res.submit_frame(frame);
         Ok(())
     }
