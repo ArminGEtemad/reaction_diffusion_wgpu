@@ -24,6 +24,10 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     // bounds
     if x_u32 >= WIDTH || y_u32 >= HEIGHT { return; }
 
+    // if inactive don't draw
+    if brush.radius <= 0.0 { return; }
+
+
     let x_float32 = f32(x_u32);
     let y_float32 = f32(y_u32);
     let dist_x = x_float32 - brush.c_x;
