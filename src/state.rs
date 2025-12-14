@@ -45,7 +45,11 @@ impl State {
         let mut brush_uniform = BrushUniform {
             c_x: 0.0,
             c_y: 0.0,
-            radius: 5.0, // TODO hardcoded now and needs to be changed in UI live
+            radius: if input.mouse_down {
+                input.brush_radius
+            } else {
+                0.0
+            },
             _pad: 0.0,
         };
 
