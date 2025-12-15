@@ -3,7 +3,7 @@ use winit::{
     dpi::LogicalSize,
     event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    keyboard::Key,
+    keyboard::{KeyCode, PhysicalKey},
     window::Window,
 };
 
@@ -128,38 +128,42 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
-                // TODO Why am I getting the debug messages twice. I got them before with the pause buttom too
-                // but never put that much thought into it.. now it is a bit annoying.
-                match &event.logical_key {
-                    Key::Character(m) if m == "1" => {
+                if event.state != ElementState::Pressed {
+                    return;
+                }
+                match event.physical_key {
+                    PhysicalKey::Code(KeyCode::Digit1) => {
                         self.input.mode = 0; // add V
                         println!("Add V Mode: {}", self.input.mode);
                     }
-                    Key::Character(m) if m == "2" => {
+
+                    PhysicalKey::Code(KeyCode::Digit2) => {
                         self.input.mode = 1; // add U
                         println!("Add U Mode: {}", self.input.mode);
                     }
-                    Key::Character(m) if m == "0" => {
+
+                    PhysicalKey::Code(KeyCode::Digit0) => {
                         self.input.mode = 3; // erase
                         println!("erase {}", self.input.mode);
                     }
 
-                    // set the pattern
-                    Key::Character(m) if m == "a" => {
+                    PhysicalKey::Code(KeyCode::KeyA) => {
                         self.current_starting_pattern = StartingPattern::Circle;
                         println!(
                             "The starting pattern has been changed to: {:?}",
                             self.current_starting_pattern
                         );
                     }
-                    Key::Character(m) if m == "b" => {
+
+                    PhysicalKey::Code(KeyCode::KeyB) => {
                         self.current_starting_pattern = StartingPattern::Square;
                         println!(
                             "The starting pattern has been changed to: {:?}",
                             self.current_starting_pattern
                         );
                     }
-                    Key::Character(m) if m == "c" => {
+
+                    PhysicalKey::Code(KeyCode::KeyC) => {
                         self.current_starting_pattern = StartingPattern::CleanSheet;
                         println!(
                             "The starting pattern has been changed to: {:?}",
@@ -167,16 +171,12 @@ impl ApplicationHandler for App {
                         );
                     }
 
-                    // pause play
-                    Key::Character(m) if m == "p" => {
-                        if event.state == ElementState::Pressed {
-                            self.input.paused = !self.input.paused;
-                            println!("Paused: {}", self.input.paused);
-                        }
+                    PhysicalKey::Code(KeyCode::KeyP) => {
+                        self.input.paused = !self.input.paused;
+                        println!("Paused: {}", self.input.paused);
                     }
 
-                    // reset and rerun
-                    Key::Character(m) if m == "r" => {
+                    PhysicalKey::Code(KeyCode::KeyR) => {
                         if let Some(st) = &mut self.state {
                             st.reset(self.current_starting_pattern);
                             println!(
