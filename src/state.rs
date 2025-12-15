@@ -1,7 +1,7 @@
 use crate::{
     InputState,
     gpu_resources::{FrameContext, GpuResource},
-    rd_system::{BrushUniform, ReactionDiffusionSystem},
+    rd_system::{BrushUniform, ReactionDiffusionSystem, StartingPattern},
     shader_watcher::ShaderWatcher,
 };
 use wgpu::SurfaceError;
@@ -79,5 +79,9 @@ impl State {
             .compute_and_render_pass(&self.gpu_res, &mut frame, input.paused);
         self.gpu_res.submit_frame(frame);
         Ok(())
+    }
+
+    pub fn reset(&mut self, pattern: StartingPattern) {
+        self.rd_system.reset_and_rerun(&self.gpu_res, pattern);
     }
 }
