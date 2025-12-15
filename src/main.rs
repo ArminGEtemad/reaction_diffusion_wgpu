@@ -7,7 +7,7 @@ use winit::{
     window::Window,
 };
 
-use crate::state::State;
+use crate::{rd_system::StartingPattern, state::State};
 
 mod gpu_resources;
 mod rd_system;
@@ -34,6 +34,7 @@ struct App {
     window: Option<&'static Window>,
     state: Option<State>,
     input: InputState,
+    current_starting_pattern: StartingPattern,
 }
 
 // making the Application
@@ -43,6 +44,7 @@ impl Default for App {
             window: None,
             state: None,
             input: InputState::default(),
+            current_starting_pattern: StartingPattern::Circle,
         }
     }
 }
@@ -126,6 +128,8 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
+                // TODO Why am I getting the debug messages twice. I got them before with the pause buttom too
+                // but never put that much thought into it.. now it is a bit annoying.
                 match &event.logical_key {
                     Key::Character(m) if m == "1" => {
                         self.input.mode = 0; // add V
@@ -140,11 +144,45 @@ impl ApplicationHandler for App {
                         println!("erase {}", self.input.mode);
                     }
 
+                    // set the pattern
+                    Key::Character(m) if m == "a" => {
+                        self.current_starting_pattern = StartingPattern::Circle;
+                        println!(
+                            "The starting pattern has been changed to: {:?}",
+                            self.current_starting_pattern
+                        );
+                    }
+                    Key::Character(m) if m == "b" => {
+                        self.current_starting_pattern = StartingPattern::Square;
+                        println!(
+                            "The starting pattern has been changed to: {:?}",
+                            self.current_starting_pattern
+                        );
+                    }
+                    Key::Character(m) if m == "c" => {
+                        self.current_starting_pattern = StartingPattern::CleanSheet;
+                        println!(
+                            "The starting pattern has been changed to: {:?}",
+                            self.current_starting_pattern
+                        );
+                    }
+
                     // pause play
                     Key::Character(m) if m == "p" => {
                         if event.state == ElementState::Pressed {
                             self.input.paused = !self.input.paused;
                             println!("Paused: {}", self.input.paused);
+                        }
+                    }
+
+                    // reset and rerun
+                    Key::Character(m) if m == "r" => {
+                        if let Some(st) = &mut self.state {
+                            st.reset(self.current_starting_pattern);
+                            println!(
+                                "Simulation restarted with the starting pattern: {:?}",
+                                self.current_starting_pattern
+                            );
                         }
                     }
 
