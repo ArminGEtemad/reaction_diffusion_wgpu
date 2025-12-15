@@ -44,6 +44,14 @@ pub struct BrushUniform {
     pub mode: u32,   // 4 byte
 }
 
+// different starting patterns
+#[derive(Clone, Copy, Debug)]
+pub enum StartingPattern {
+    Circle,
+    Square,
+    CleanSheet,
+}
+
 // Communication between the system and GPU
 pub struct ReactionDiffusionSystem {
     // uniform
@@ -159,80 +167,6 @@ impl ReactionDiffusionSystem {
             contents: bytemuck::bytes_of(&brush_uniform),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
-
-        // initialize a blob in the middle
-        // TODO make a separate file for blob
-        let mut data = vec![0.0_f32; (WIDTH * HEIGHT * 4) as usize]; // each pixel has 4 values RGBA
-
-        // loop over all the pixels
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                let pixel_idx = ((y * WIDTH + x) * 4) as usize;
-
-                // element U everywhere
-                // element V only in blob
-                let u = 1.0_f32;
-                let mut v = 0.0_f32;
-
-                // blob in the center for element V
-                let center_x = WIDTH as i32 / 2;
-                let center_y = HEIGHT as i32 / 2;
-
-                let dist_x = x as i32 - center_x;
-                let dist_y = y as i32 - center_y;
-
-                if dist_x.abs() * dist_x.abs() + dist_y.abs() * dist_y.abs() < 100 {
-                    // TODO check out standard initializations
-                    v = 1.0; // add element V to the area
-                }
-
-                // write the data to the channels
-                data[pixel_idx + 0] = u;
-                data[pixel_idx + 1] = v;
-                data[pixel_idx + 2] = 0.0;
-                data[pixel_idx + 3] = 1.0;
-            }
-        }
-
-        let data_bytes: &[u8] = bytemuck::cast_slice(&data);
-
-        let layout = TexelCopyBufferLayout {
-            offset: 0,
-            // RGBA32Float = 4 channel * 4 byte per pixel
-            bytes_per_row: Some(4 * 4 * WIDTH),
-            rows_per_image: Some(HEIGHT),
-        };
-
-        let extent = Extent3d {
-            width: WIDTH,
-            height: HEIGHT,
-            depth_or_array_layers: 1,
-        };
-
-        // queue source 1
-        gpu_res.queue.write_texture(
-            TexelCopyTextureInfo {
-                texture: &texture_source_1,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: TextureAspect::All,
-            },
-            data_bytes,
-            layout,
-            extent,
-        );
-        // queue source 2
-        gpu_res.queue.write_texture(
-            TexelCopyTextureInfo {
-                texture: &texture_source_2,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: TextureAspect::All,
-            },
-            data_bytes,
-            layout,
-            extent,
-        );
 
         // shader modules
 
@@ -515,7 +449,7 @@ impl ReactionDiffusionSystem {
             cache: None,
         });
 
-        Self {
+        let self_package = Self {
             time_buffer,
             _start_instant: start_instant,
             _last_time: last_time,
@@ -543,7 +477,122 @@ impl ReactionDiffusionSystem {
             render_pipeline,
 
             use_1_as_source: true,
+        };
+        self_package.write_pattern_to_starting_space(gpu_res, StartingPattern::Circle);
+
+        // return
+        self_package
+    }
+
+    fn write_pattern_to_starting_space(&self, gpu_res: &GpuResource, pattern: StartingPattern) {
+        let mut data = vec![0.0; (WIDTH * HEIGHT * 4) as usize]; // all pixels with all RGBA elements 0.0
+
+        match pattern {
+            StartingPattern::Circle => {
+                // loop over all the pixels
+                for y in 0..HEIGHT {
+                    for x in 0..WIDTH {
+                        let pixel_idx = ((y * WIDTH + x) * 4) as usize;
+
+                        // element U everywhere
+                        // element V only in blob
+                        let u = 1.0_f32;
+                        let mut v = 0.0_f32;
+
+                        // blob in the center for element V
+                        let center_x = WIDTH as i32 / 2;
+                        let center_y = HEIGHT as i32 / 2;
+
+                        let dist_x = x as i32 - center_x;
+                        let dist_y = y as i32 - center_y;
+
+                        // TODO the size of the circle can be chosen by the user
+                        if dist_x.abs() * dist_x.abs() + dist_y.abs() * dist_y.abs() < 100 {
+                            // TODO check out standard initializations
+                            v = 1.0; // add element V to the area
+                        }
+
+                        // write the data to the channels
+                        data[pixel_idx + 0] = u;
+                        data[pixel_idx + 1] = v;
+                        data[pixel_idx + 2] = 0.0;
+                        data[pixel_idx + 3] = 1.0;
+                    }
+                }
+            }
+
+            StartingPattern::Square => {
+                // loop over all the pixels
+                for y in 0..HEIGHT {
+                    for x in 0..WIDTH {
+                        let pixel_idx = ((y * WIDTH + x) * 4) as usize;
+
+                        // element U everywhere
+                        // element V only in blob
+                        let u = 1.0_f32;
+                        let mut v = 0.0_f32;
+
+                        // blob in the center for element V
+                        let center_x = WIDTH as i32 / 2;
+                        let center_y = HEIGHT as i32 / 2;
+
+                        let dist_x = x as i32 - center_x;
+                        let dist_y = y as i32 - center_y;
+
+                        if dist_x.abs() < 10 && dist_y.abs() < 10 {
+                            // TODO check out standard initializations
+                            v = 1.0; // add element V to the area
+                        }
+
+                        // write the data to the channels
+                        data[pixel_idx + 0] = u;
+                        data[pixel_idx + 1] = v;
+                        data[pixel_idx + 2] = 0.0;
+                        data[pixel_idx + 3] = 1.0;
+                    }
+                }
+            }
+            StartingPattern::CleanSheet => {}
         }
+
+        let data_bytes: &[u8] = bytemuck::cast_slice(&data);
+        let layout = TexelCopyBufferLayout {
+            offset: 0,
+            // RGBA32Float = 4 channel * 4 byte per pixel
+            bytes_per_row: Some(4 * 4 * WIDTH),
+            rows_per_image: Some(HEIGHT),
+        };
+
+        let extent = Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        };
+
+        // queue source 1
+        gpu_res.queue.write_texture(
+            TexelCopyTextureInfo {
+                texture: &self.texture_source_1,
+                mip_level: 0,
+                origin: Origin3d::ZERO,
+                aspect: TextureAspect::All,
+            },
+            data_bytes,
+            layout,
+            extent,
+        );
+        // queue source 2
+        gpu_res.queue.write_texture(
+            TexelCopyTextureInfo {
+                texture: &self.texture_source_2,
+                mip_level: 0,
+                origin: Origin3d::ZERO,
+                aspect: TextureAspect::All,
+            },
+            data_bytes,
+            layout,
+            extent,
+        );
     }
 
     pub fn set_brush_parameters(&self, gpu_res: &GpuResource, brush_uniform: &BrushUniform) {
@@ -723,6 +772,13 @@ impl ReactionDiffusionSystem {
         self.reload_compute_pipeline(gpu_res);
         self.reload_render_pipeline(gpu_res);
         println!("Pipelines Fully Reloaded (Hot Reload)");
+    }
+
+    // reset function
+    pub fn reset_and_rerun(&mut self, gpu_res: &GpuResource, pattern: StartingPattern) {
+        self.write_pattern_to_starting_space(gpu_res, pattern);
+        self._start_instant = Instant::now();
+        self._last_time = 0.0;
     }
 
     // a helper function for WIDTH and WEIGHT
