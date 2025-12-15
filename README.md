@@ -20,7 +20,7 @@ After the fist focus is done, I want to focus on what i planned.
 
 - [x] Hot reload
 - [x] Interactivity (Brush, Eraser, Pause, Play)
-- [ ] Add different starting blob shapes / reset
+- [x] Add different starting blob shapes / reset
 
 ## First Focus
 
@@ -73,13 +73,17 @@ With parameters: DU = 0.16, DV = 0.08, FEED = 0.0645, KILL = 0.062
 There are three modes for the brush that the user can toggle in between using the keyboard keys `0`, `1` and `2`.
 The size of the brush can be changed using the mouse wheel. The the key `p` can be used to pause and play the the simulation.
 
-| Key         | What it does     |
-| ----------- | ---------------- |
-| 1           | Add element V    |
-| 2           | Add element U    |
-| 0           | Erase            |
-| p           | Pause/Play       |
-| mouse wheel | Resize the brush |
+| Key         | What it does                             |
+| ----------- | ---------------------------------------- |
+| 1           | Add element V                            |
+| 2           | Add element U                            |
+| 0           | Erase                                    |
+| p           | Pause/Play                               |
+| r           | Reset the simulation                     |
+| a           | Change the starting blob shape to Circle |
+| b           | Change the starting blob shape to Square |
+| c           | No starting blob                         |
+| mouse wheel | Resize the brush                         |
 
 ## Math and Design
 
