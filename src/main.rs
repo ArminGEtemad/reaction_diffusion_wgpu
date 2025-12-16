@@ -10,7 +10,9 @@ use winit::{
 use crate::{rd_system::StartingPattern, state::State};
 
 mod gpu_resources;
+mod nodes;
 mod rd_system;
+mod render_graph;
 mod shader_watcher;
 mod state;
 
@@ -28,6 +30,7 @@ struct InputState {
     brush_radius: f32,
     mode: u32,
     paused: bool,
+    debug_mode: bool,
 }
 
 struct App {
@@ -57,6 +60,7 @@ impl Default for InputState {
             brush_radius: 5.0,
             mode: 0,
             paused: false,
+            debug_mode: false,
         }
     }
 }
@@ -184,6 +188,11 @@ impl ApplicationHandler for App {
                                 self.current_starting_pattern
                             );
                         }
+                    }
+
+                    PhysicalKey::Code(KeyCode::KeyD) => {
+                        self.input.debug_mode = !self.input.debug_mode;
+                        println!("Debug mode: {}", self.input.debug_mode);
                     }
 
                     _ => {}
