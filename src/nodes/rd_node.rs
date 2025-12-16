@@ -1,7 +1,10 @@
 use crate::{
-    gpu_resources::GpuResource,
+    gpu_resources::{FrameContext, GpuResource},
     rd_system::{BrushUniform, ReactionDiffusionSystem, StartingPattern},
-    render_graph::node::RenderNode,
+    render_graph::{
+        node::{PerFrameParameters, RenderNode},
+        resource_registry::ResourceRegistry,
+    },
 };
 
 pub struct ReactionDiffusionNode {
@@ -26,10 +29,10 @@ impl RenderNode for ReactionDiffusionNode {
 
     fn execute(
         &mut self,
-        _registry: &crate::render_graph::resource_registry::ResourceRegistry,
+        _registry: &ResourceRegistry,
         gpu_res: &GpuResource,
-        frame: &mut crate::gpu_resources::FrameContext,
-        per_frame_parames: &crate::render_graph::node::PerFrameParameters,
+        frame: &mut FrameContext,
+        per_frame_parames: &PerFrameParameters,
     ) {
         let (w_rd, h_rd) = self.rd_system.rd_size();
 
