@@ -601,28 +601,28 @@ impl ReactionDiffusionSystem {
             .write_buffer(&self.brush_buffer, 0, bytemuck::bytes_of(brush_uniform));
     }
 
-    // resposible for updating time and render pass / compute pass
-    pub fn compute_and_render_pass(
+    pub fn step_simulation(
         &mut self,
         gpu_res: &GpuResource,
         frame: &mut FrameContext,
         paused: bool,
     ) {
-        // ping pong brush
+        // ping pong brush injection
         let brush_bg = if self.use_1_as_source {
             &self.brush_bg_to_source_1
         } else {
             &self.brush_bg_to_source_2
         };
 
-        // ping or pong?
-        let (compute_bg, render_bg) = if self.use_1_as_source {
-            (&self.compute_bg_1_to_2, &self.render_bg_from_2)
+        // ping pong compute
+        let compute_bg = if self.use_1_as_source {
+            &self.compute_bg_1_to_2
         } else {
-            (&self.compute_bg_2_to_1, &self.render_bg_from_1)
+            &self.compute_bg_2_to_1
         };
 
         if !paused {
+            // Brush injection pass
             {
                 let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
                     label: Some("Brush Compute Pass"),
@@ -636,57 +636,63 @@ impl ReactionDiffusionSystem {
                 let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
                 cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
             }
-            // update dt
-            //let now = self.start_instant.elapsed().as_secs_f32();
-            let dt = 0.2; //(now - self.last_time).max(0.0);
-            //self.last_time = now;
-
-            // TODO make separate functions for these... it is getting out of control
-            let time_uniform = TimeUniform { dt, _pad: [0.0; 3] };
-
-            gpu_res
-                .queue
-                .write_buffer(&self.time_buffer, 0, bytemuck::bytes_of(&time_uniform));
-
-            // compute pass scope
-            {
-                let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("Compute Pass"),
-                    timestamp_writes: None,
-                });
-
-                cpass.set_pipeline(&self.compute_pipeline);
-                cpass.set_bind_group(0, compute_bg, &[]);
-
-                let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
-                let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
-                cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
-            }
-
-            self.use_1_as_source = !self.use_1_as_source;
         }
 
-        // render pass scope
+        // update dt
+        let dt = 0.2;
+
+        // TODO make separate functions for these... it is getting out of control
+        let time_uniform = TimeUniform { dt, _pad: [0.0; 3] };
+
+        gpu_res
+            .queue
+            .write_buffer(&self.time_buffer, 0, bytemuck::bytes_of(&time_uniform));
+
+        // compute pass scope
         {
-            let mut rpass = frame.encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &frame.view,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
+            let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("Compute Pass"),
                 timestamp_writes: None,
-                occlusion_query_set: None,
             });
 
-            rpass.set_pipeline(&self.render_pipeline);
-            rpass.set_bind_group(0, render_bg, &[]);
-            rpass.draw(0..3, 0..1);
+            cpass.set_pipeline(&self.compute_pipeline);
+            cpass.set_bind_group(0, compute_bg, &[]);
+
+            let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
+            let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
+            cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
         }
+
+        self.use_1_as_source = !self.use_1_as_source;
+    }
+
+    pub fn step_render(&self, frame: &mut FrameContext, texture_view: &TextureView) {
+        // ping pong compute
+        let render_bg = if self.use_1_as_source {
+            &self.render_bg_from_1
+        } else {
+            &self.render_bg_from_2
+        };
+
+        // render pass
+        let mut rpass = frame.encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: texture_view,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::BLACK),
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+
+        rpass.set_pipeline(&self.render_pipeline);
+        rpass.set_bind_group(0, render_bg, &[]);
+        rpass.draw(0..3, 0..1);
     }
 
     // reload and rebuild pipelines if shaders are changed
