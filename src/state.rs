@@ -1,7 +1,7 @@
 use crate::{
     InputState,
     gpu_resources::{FrameContext, GpuResource},
-    nodes::rd_node::ReactionDiffusionNode,
+    nodes::rd_node::{ReactionDiffusionSimulationNode, create_rd_shared_nodes},
     rd_system::StartingPattern,
     render_graph::{graph::RenderGraph, node::PerFrameParameters},
     shader_watcher::ShaderWatcher,
@@ -19,14 +19,14 @@ pub struct State {
 impl State {
     pub async fn new(window: &'static Window) -> Result<Self, String> {
         let gpu_res = GpuResource::new(window).await?;
-        //let rd_system = ReactionDiffusionSystem::new(&gpu_res);
+        let mut graph = RenderGraph::new();
+        let (rd_sim, rd_display) = create_rd_shared_nodes(&gpu_res);
+        graph.add_node(rd_sim);
+        graph.add_node(rd_display);
 
         let shaders_path = format!("{}/shaders", env!("CARGO_MANIFEST_DIR")); // absolute address 
         println!("Watching Shaders at: {}", shaders_path);
         let shader_watcher = ShaderWatcher::new(shaders_path);
-
-        let mut graph = RenderGraph::new();
-        graph.add_node(ReactionDiffusionNode::new(&gpu_res));
 
         Ok(Self {
             gpu_res,
@@ -65,8 +65,8 @@ impl State {
     }
 
     pub fn reset(&mut self, pattern: StartingPattern) {
-        if let Some(rd_node) = self.graph.get_node_mut::<ReactionDiffusionNode>() {
-            rd_node.reset(&self.gpu_res, pattern);
+        if let Some(sim_node) = self.graph.get_node_mut::<ReactionDiffusionSimulationNode>() {
+            sim_node.reset(&self.gpu_res, pattern);
         } else {
             eprint!("ReactionDiffusionNode not found!");
         }
