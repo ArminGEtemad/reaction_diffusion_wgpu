@@ -33,7 +33,7 @@ impl RenderGraph {
             if per_frame_parameters.debug_mode {
                 println!("Executing {}", node.name());
             }
-            node.execute(&self.registry, gpu_res, frame, per_frame_parameters);
+            node.execute(&mut self.registry, gpu_res, frame, per_frame_parameters);
         }
     }
 
