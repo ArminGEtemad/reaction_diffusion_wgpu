@@ -17,7 +17,7 @@ const WG_Y: u32 = 16;
 
 // helper function to have a dynamical shader address
 // so the source is not "hard coded" in the compile time
-fn load_ablsolute_path(relative_path: &str) -> String {
+pub fn load_ablsolute_path(relative_path: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative_path); // making absolute path
     fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("Failed to read shader {:?}\nError: {}", path, e))
@@ -73,19 +73,12 @@ pub struct ReactionDiffusionSystem {
     pub texture_source_2: Texture,
     pub texture_view_1: TextureView,
     pub texture_view_2: TextureView,
-    pub sampler: Sampler,
 
     // compute
     pub compute_bgl: BindGroupLayout,
     pub compute_bg_1_to_2: BindGroup,
     pub compute_bg_2_to_1: BindGroup,
     pub compute_pipeline: ComputePipeline,
-
-    // rendering
-    pub render_bgl: BindGroupLayout,
-    pub render_bg_from_1: BindGroup,
-    pub render_bg_from_2: BindGroup,
-    pub render_pipeline: RenderPipeline,
 
     // ping or pong :)
     pub use_1_as_source: bool,
@@ -142,17 +135,6 @@ impl ReactionDiffusionSystem {
         let texture_view_1 = texture_source_1.create_view(&TextureViewDescriptor::default());
         let texture_view_2 = texture_source_2.create_view(&TextureViewDescriptor::default());
 
-        let sampler = device_m.create_sampler(&SamplerDescriptor {
-            label: Some("Sampler Descriptor"),
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Nearest,
-            min_filter: FilterMode::Nearest,
-            mipmap_filter: FilterMode::Nearest,
-            ..Default::default()
-        });
-
         // initializing brush
         // TODO where do I initialize what could be important
         let brush_uniform = BrushUniform {
@@ -173,7 +155,6 @@ impl ReactionDiffusionSystem {
         // a run time shader loader instead of compile time which makes the program ready for hot reload
         let brush_shader_path = load_ablsolute_path("shaders/brush_compute.wgsl");
         let compute_shader_path = load_ablsolute_path("shaders/rd_compute.wgsl");
-        let render_shader_path = load_ablsolute_path("shaders/rd_display.wgsl");
 
         let brush_shader = device_m.create_shader_module(ShaderModuleDescriptor {
             label: Some("Brush Shader Module"),
@@ -182,10 +163,6 @@ impl ReactionDiffusionSystem {
         let compute_shader = device_m.create_shader_module(ShaderModuleDescriptor {
             label: Some("Compute Shader Module"),
             source: ShaderSource::Wgsl(compute_shader_path.into()),
-        });
-        let render_shader = device_m.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Render Shader Module"),
-            source: ShaderSource::Wgsl(render_shader_path.into()),
         });
 
         // brush compute
@@ -362,93 +339,6 @@ impl ReactionDiffusionSystem {
             cache: None,
         });
 
-        // rendering
-        let render_bgl = device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Render Bind Group Layout"),
-            entries: &[
-                BindGroupLayoutEntry {
-                    // rd texture
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: false },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    // rd sampler
-                    binding: 1,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
-                    count: None,
-                },
-            ],
-        });
-
-        let render_bg_from_1 = device_m.create_bind_group(&BindGroupDescriptor {
-            label: Some("Rendering from BG from  source 1"),
-            layout: &render_bgl,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: BindingResource::TextureView(&texture_view_1),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
-
-        let render_bg_from_2 = device_m.create_bind_group(&BindGroupDescriptor {
-            label: Some("Rendering from BG from  source 2"),
-            layout: &render_bgl,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: BindingResource::TextureView(&texture_view_2),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
-
-        let render_pipeline_layout = device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Rendering Pipeline Layout"),
-            bind_group_layouts: &[&render_bgl],
-            push_constant_ranges: &[],
-        });
-
-        let render_pipeline = device_m.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Rendering Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: VertexState {
-                module: &render_shader,
-                entry_point: Some("vs_main"),
-                compilation_options: PipelineCompilationOptions::default(),
-                buffers: &[],
-            },
-            primitive: PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: MultisampleState::default(),
-            fragment: Some(FragmentState {
-                module: &render_shader,
-                entry_point: Some("fs_main"),
-                compilation_options: PipelineCompilationOptions::default(),
-                targets: &[Some(ColorTargetState {
-                    format: gpu_res.surface_format(),
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
-                })],
-            }),
-            multiview: None,
-            cache: None,
-        });
-
         let self_package = Self {
             time_buffer,
             _start_instant: start_instant,
@@ -464,17 +354,11 @@ impl ReactionDiffusionSystem {
             texture_source_2,
             texture_view_1,
             texture_view_2,
-            sampler,
 
             compute_bgl,
             compute_bg_1_to_2,
             compute_bg_2_to_1,
             compute_pipeline,
-
-            render_bgl,
-            render_bg_from_1,
-            render_bg_from_2,
-            render_pipeline,
 
             use_1_as_source: true,
         };
@@ -666,35 +550,6 @@ impl ReactionDiffusionSystem {
         self.use_1_as_source = !self.use_1_as_source;
     }
 
-    pub fn step_render(&self, frame: &mut FrameContext, texture_view: &TextureView) {
-        // ping pong compute
-        let render_bg = if self.use_1_as_source {
-            &self.render_bg_from_1
-        } else {
-            &self.render_bg_from_2
-        };
-
-        // render pass
-        let mut rpass = frame.encoder.begin_render_pass(&RenderPassDescriptor {
-            label: Some("Render Pass"),
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view: texture_view,
-                resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Clear(Color::BLACK),
-                    store: StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-
-        rpass.set_pipeline(&self.render_pipeline);
-        rpass.set_bind_group(0, render_bg, &[]);
-        rpass.draw(0..3, 0..1);
-    }
-
     // reload and rebuild pipelines if shaders are changed
     // TODO This makes this script too long. Should I refactor it or make a script for it?
     fn reload_compute_pipeline(&mut self, gpu_res: &GpuResource) {
@@ -727,57 +582,11 @@ impl ReactionDiffusionSystem {
                 });
     }
 
-    fn reload_render_pipeline(&mut self, gpu_res: &GpuResource) {
-        let render_shader_path = load_ablsolute_path("shaders/rd_display.wgsl");
-        let render_shader = gpu_res.device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Render Shader (Rebuilding)"),
-            source: ShaderSource::Wgsl(render_shader_path.into()),
-        });
-
-        let render_pipeline_layout =
-            gpu_res
-                .device
-                .create_pipeline_layout(&PipelineLayoutDescriptor {
-                    label: Some("Render Pipeline Layout (Rebuilding)"),
-                    bind_group_layouts: &[&self.render_bgl],
-                    push_constant_ranges: &[],
-                });
-
-        self.render_pipeline = gpu_res
-            .device
-            .create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some("Render Pipeline (Rebuilding)"),
-                layout: Some(&render_pipeline_layout),
-                vertex: VertexState {
-                    module: &render_shader,
-                    entry_point: Some("vs_main"),
-                    compilation_options: PipelineCompilationOptions::default(),
-                    buffers: &[],
-                },
-                primitive: PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: MultisampleState::default(),
-                fragment: Some(FragmentState {
-                    module: &render_shader,
-                    entry_point: Some("fs_main"),
-                    compilation_options: PipelineCompilationOptions::default(),
-                    targets: &[Some(ColorTargetState {
-                        format: gpu_res.surface_format(),
-                        blend: Some(BlendState::REPLACE),
-                        write_mask: ColorWrites::ALL,
-                    })],
-                }),
-                multiview: None,
-                cache: None,
-            });
-    }
-
     // rebuild
     pub fn rebuild_pipeline(&mut self, gpu_res: &GpuResource) {
-        println!("Rebuilding Pipelines (Hot Reload)");
+        println!("Rebuilding Compute Pipelines (Hot Reload)");
         self.reload_compute_pipeline(gpu_res);
-        self.reload_render_pipeline(gpu_res);
-        println!("Pipelines Fully Reloaded (Hot Reload)");
+        println!("Compute Pipelines Reloaded (Hot Reload)");
     }
 
     // reset function
