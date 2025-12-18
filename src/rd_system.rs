@@ -791,4 +791,12 @@ impl ReactionDiffusionSystem {
     pub fn rd_size(&self) -> (u32, u32) {
         (WIDTH, HEIGHT)
     }
+
+    pub fn current_ouput_view(&self) -> &TextureView {
+        if self.use_1_as_source {
+            &self.texture_view_1
+        } else {
+            &self.texture_view_2
+        }
+    }
 }
