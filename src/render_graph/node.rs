@@ -20,7 +20,7 @@ pub trait RenderNode {
     // execure every frame
     fn execute(
         &mut self,
-        registry: &ResourceRegistry,
+        registry: &mut ResourceRegistry,
         gpu_res: &GpuResource,
         frame: &mut FrameContext,
         per_frame_parames: &PerFrameParameters,
