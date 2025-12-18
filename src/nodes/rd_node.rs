@@ -52,7 +52,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
     fn execute(
         &mut self,
-        _registry: &ResourceRegistry,
+        registry: &mut ResourceRegistry,
         gpu_res: &GpuResource,
         frame: &mut FrameContext,
         per_frame_parames: &PerFrameParameters,
@@ -104,6 +104,9 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         {
             let mut rd_shared = self.rd_shared.borrow_mut();
             rd_shared.step_simulation(gpu_res, frame, per_frame_parames.paused);
+
+            let out_view = rd_shared.current_ouput_view();
+            registry.set_view("rd output", out_view);
         }
     }
 
@@ -126,7 +129,7 @@ impl RenderNode for ReactionDiffusionDisplayNode {
 
     fn execute(
         &mut self,
-        _registry: &ResourceRegistry,
+        _registry: &mut ResourceRegistry,
         _gpu_res: &GpuResource,
         frame: &mut FrameContext,
         _per_frame_parames: &PerFrameParameters,
