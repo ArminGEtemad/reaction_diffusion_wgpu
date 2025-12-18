@@ -23,6 +23,7 @@ impl State {
         let (rd_sim, rd_display) = create_rd_shared_nodes(&gpu_res);
         graph.add_node(rd_sim);
         graph.add_node(rd_display);
+        graph.prepare(&gpu_res);
 
         let shaders_path = format!("{}/shaders", env!("CARGO_MANIFEST_DIR")); // absolute address 
         println!("Watching Shaders at: {}", shaders_path);
