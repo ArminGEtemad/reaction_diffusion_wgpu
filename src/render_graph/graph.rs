@@ -23,6 +23,12 @@ impl RenderGraph {
         self.nodes.push(Box::new(node));
     }
 
+    pub fn prepare(&mut self, gpu_res: &GpuResource) {
+        for node in self.nodes.iter_mut() {
+            node.prepare(&mut self.registry, gpu_res);
+        }
+    }
+
     pub fn execute(
         &mut self,
         gpu_res: &GpuResource,

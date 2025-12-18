@@ -17,6 +17,8 @@ pub struct PerFrameParameters {
 pub trait RenderNode {
     fn name(&self) -> &str;
 
+    fn prepare(&mut self, _registry: &mut ResourceRegistry, _gpu_res: &GpuResource) {}
+
     // execure every frame
     fn execute(
         &mut self,
