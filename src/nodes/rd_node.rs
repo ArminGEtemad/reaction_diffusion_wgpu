@@ -9,16 +9,11 @@ use crate::{
         resource_registry::ResourceRegistry,
     },
 };
-use std::{cell::RefCell, rc::Rc};
+
 use wgpu::*;
 
-// RC allows for different owners of the same data
-// RefCell allows to mutate data even if they are immutable
-type ReactionDiffusionShared = Rc<RefCell<ReactionDiffusionSystem>>;
-
-// TODO get rid of the shared logic
 pub struct ReactionDiffusionSimulationNode {
-    rd_shared: ReactionDiffusionShared,
+    rd_sim: ReactionDiffusionSystem,
     do_reset: Option<StartingPattern>,
 }
 
@@ -34,9 +29,8 @@ pub fn create_rd_shared_nodes(
     ReactionDiffusionSimulationNode,
     ReactionDiffusionDisplayNode,
 ) {
-    let shared = Rc::new(RefCell::new(ReactionDiffusionSystem::new(gpu_res)));
     let sim = ReactionDiffusionSimulationNode {
-        rd_shared: Rc::clone(&shared),
+        rd_sim: ReactionDiffusionSystem::new(gpu_res),
         do_reset: Some(StartingPattern::Circle),
     };
     let display = ReactionDiffusionDisplayNode {
@@ -61,7 +55,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
     }
 
     fn prepare(&mut self, registry: &mut ResourceRegistry, gpu_res: &GpuResource) {
-        let (w_rd, h_rd) = self.rd_shared.borrow().rd_size();
+        let (w_rd, h_rd) = self.rd_sim.rd_size();
 
         registry.storage_texture_creator(
             "rd ping",
@@ -85,7 +79,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
                 registry.get_texture("rd pong"),
             ) {
                 write_pattern_to_starting_space(gpu_res, &ping.texture, &pong.texture, pattern);
-                self.rd_shared.borrow_mut().reset_time();
+                self.rd_sim.reset_time();
             }
         }
     }
@@ -97,11 +91,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         frame: &mut FrameContext,
         per_frame_parames: &PerFrameParameters,
     ) {
-        let (w_rd, h_rd) = {
-            // new scope
-            let rd_shared = self.rd_shared.borrow();
-            rd_shared.rd_size()
-        };
+        let (w_rd, h_rd) = self.rd_sim.rd_size();
 
         if let Some(pattern) = self.do_reset.take() {
             if let (Some(ping), Some(pong)) = (
@@ -109,7 +99,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
                 registry.get_texture("rd pong"),
             ) {
                 write_pattern_to_starting_space(gpu_res, &ping.texture, &pong.texture, pattern);
-                self.rd_shared.borrow_mut().reset_time();
+                self.rd_sim.reset_time();
             } else {
                 eprintln!("do_reset requested but ping/pong are missing");
             }
@@ -144,13 +134,9 @@ impl RenderNode for ReactionDiffusionSimulationNode {
             }
         }
 
-        // upload the brush uniform
-        {
-            let rd_shared = self.rd_shared.borrow();
-            rd_shared.set_brush_parameters(gpu_res, &brush_uniform);
-        }
+        self.rd_sim.set_brush_parameters(gpu_res, &brush_uniform);
 
-        // get ping or pong from registry
+        // get ping or pong and clone to shorten borrow
         let (ping_view, pong_view) = {
             let ping = registry
                 .get_view("rd ping")
@@ -164,8 +150,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         };
 
         let newest_view = {
-            let mut rd_shared = self.rd_shared.borrow_mut();
-            rd_shared.step_simulation(
+            self.rd_sim.step_simulation(
                 gpu_res,
                 frame,
                 per_frame_parames.paused,
@@ -173,7 +158,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
                 &pong_view,
             );
 
-            if rd_shared.is_ping_source() {
+            if self.rd_sim.is_ping_source() {
                 &ping_view
             } else {
                 &pong_view
@@ -185,7 +170,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
     fn called_on_hotreload(&mut self, gpu_res: &GpuResource) {
         // TODO bring the rebuild pipeline here too
-        self.rd_shared.borrow_mut().rebuild_pipeline(gpu_res);
+        self.rd_sim.rebuild_pipeline(gpu_res);
     }
 
     fn as_any(&mut self) -> &mut dyn std::any::Any {
