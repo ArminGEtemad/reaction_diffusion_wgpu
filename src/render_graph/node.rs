@@ -19,7 +19,7 @@ pub trait RenderNode {
 
     fn prepare(&mut self, _registry: &mut ResourceRegistry, _gpu_res: &GpuResource) {}
 
-    // execure every frame
+    // execute every frame
     fn execute(
         &mut self,
         registry: &mut ResourceRegistry,
