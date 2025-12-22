@@ -23,6 +23,123 @@ pub fn load_ablsolute_path(relative_path: &str) -> String {
         .unwrap_or_else(|e| panic!("Failed to read shader {:?}\nError: {}", path, e))
 }
 
+// helper function to make the initial blob or make a clean sheet
+pub fn write_pattern_to_starting_space(
+    gpu_res: &GpuResource,
+    texture_1: &Texture,
+    texture_2: &Texture,
+    pattern: StartingPattern,
+) {
+    let mut data = vec![0.0; (WIDTH * HEIGHT * 4) as usize]; // all pixels with all RGBA elements 0.0
+
+    match pattern {
+        StartingPattern::Circle => {
+            // loop over all the pixels
+            for y in 0..HEIGHT {
+                for x in 0..WIDTH {
+                    let pixel_idx = ((y * WIDTH + x) * 4) as usize;
+
+                    // element U everywhere
+                    // element V only in blob
+                    let u = 1.0_f32;
+                    let mut v = 0.0_f32;
+
+                    // blob in the center for element V
+                    let center_x = WIDTH as i32 / 2;
+                    let center_y = HEIGHT as i32 / 2;
+
+                    let dist_x = x as i32 - center_x;
+                    let dist_y = y as i32 - center_y;
+
+                    // TODO the size of the circle can be chosen by the user
+                    if dist_x.abs() * dist_x.abs() + dist_y.abs() * dist_y.abs() < 100 {
+                        // TODO check out standard initializations
+                        v = 1.0; // add element V to the area
+                    }
+
+                    // write the data to the channels
+                    data[pixel_idx + 0] = u;
+                    data[pixel_idx + 1] = v;
+                    data[pixel_idx + 2] = 0.0;
+                    data[pixel_idx + 3] = 1.0;
+                }
+            }
+        }
+
+        StartingPattern::Square => {
+            // loop over all the pixels
+            for y in 0..HEIGHT {
+                for x in 0..WIDTH {
+                    let pixel_idx = ((y * WIDTH + x) * 4) as usize;
+
+                    // element U everywhere
+                    // element V only in blob
+                    let u = 1.0_f32;
+                    let mut v = 0.0_f32;
+
+                    // blob in the center for element V
+                    let center_x = WIDTH as i32 / 2;
+                    let center_y = HEIGHT as i32 / 2;
+
+                    let dist_x = x as i32 - center_x;
+                    let dist_y = y as i32 - center_y;
+
+                    if dist_x.abs() < 10 && dist_y.abs() < 10 {
+                        // TODO check out standard initializations
+                        v = 1.0; // add element V to the area
+                    }
+
+                    // write the data to the channels
+                    data[pixel_idx + 0] = u;
+                    data[pixel_idx + 1] = v;
+                    data[pixel_idx + 2] = 0.0;
+                    data[pixel_idx + 3] = 1.0;
+                }
+            }
+        }
+        StartingPattern::CleanSheet => {}
+    }
+
+    let data_bytes: &[u8] = bytemuck::cast_slice(&data);
+    let layout = TexelCopyBufferLayout {
+        offset: 0,
+        // RGBA32Float = 4 channel * 4 byte per pixel
+        bytes_per_row: Some(4 * 4 * WIDTH),
+        rows_per_image: Some(HEIGHT),
+    };
+
+    let extent = Extent3d {
+        width: WIDTH,
+        height: HEIGHT,
+        depth_or_array_layers: 1,
+    };
+
+    // queue source 1
+    gpu_res.queue.write_texture(
+        TexelCopyTextureInfo {
+            texture: texture_1,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: TextureAspect::All,
+        },
+        data_bytes,
+        layout,
+        extent,
+    );
+    // queue source 2
+    gpu_res.queue.write_texture(
+        TexelCopyTextureInfo {
+            texture: texture_2,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: TextureAspect::All,
+        },
+        data_bytes,
+        layout,
+        extent,
+    );
+}
+
 // time
 // this lives in group 0 binding 0 (RD shader)
 #[repr(C)] // format expected by the gpu
@@ -62,26 +179,14 @@ pub struct ReactionDiffusionSystem {
     // brush
     pub brush_buffer: Buffer,
     pub brush_bgl: BindGroupLayout,
-    pub brush_bg_to_source_1: BindGroup, // brush writes sometimes into ping
-    pub brush_bg_to_source_2: BindGroup, // brush writes sometimes into pong
     pub brush_pipeline: ComputePipeline,
-
-    // texture source lives in group 0 binding 1 (display)
-    // using two textures one reads while other writes
-    // then the roles change
-    pub texture_source_1: Texture,
-    pub texture_source_2: Texture,
-    pub texture_view_1: TextureView,
-    pub texture_view_2: TextureView,
 
     // compute
     pub compute_bgl: BindGroupLayout,
-    pub compute_bg_1_to_2: BindGroup,
-    pub compute_bg_2_to_1: BindGroup,
     pub compute_pipeline: ComputePipeline,
 
     // ping or pong :)
-    pub use_1_as_source: bool,
+    pub use_ping_as_source: bool,
 }
 
 impl ReactionDiffusionSystem {
@@ -103,37 +208,6 @@ impl ReactionDiffusionSystem {
 
         let start_instant = Instant::now();
         let last_time: f32 = 0.0;
-
-        // create textures
-        let texture_desc = TextureDescriptor {
-            label: Some("Texture Descriptor"),
-            size: Extent3d {
-                width: WIDTH,
-                height: HEIGHT,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba32Float,
-            usage: TextureUsages::STORAGE_BINDING
-                | TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_DST,
-            view_formats: &[],
-        };
-
-        let texture_source_1 = device_m.create_texture(&TextureDescriptor {
-            label: Some("Texture Descriptor 1"),
-            ..texture_desc.clone()
-        });
-
-        let texture_source_2 = device_m.create_texture(&TextureDescriptor {
-            label: Some("Texture Descriptor 2"),
-            ..texture_desc // passing ownership since we don't need it anymore
-        });
-
-        let texture_view_1 = texture_source_1.create_view(&TextureViewDescriptor::default());
-        let texture_view_2 = texture_source_2.create_view(&TextureViewDescriptor::default());
 
         // initializing brush
         // TODO where do I initialize what could be important
@@ -196,36 +270,6 @@ impl ReactionDiffusionSystem {
             ],
         });
 
-        let brush_bg_to_source_1 = device_m.create_bind_group(&BindGroupDescriptor {
-            label: Some("Brush Bind Group 1"),
-            layout: &brush_bgl,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: brush_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&texture_view_1),
-                },
-            ],
-        });
-
-        let brush_bg_to_source_2 = device_m.create_bind_group(&BindGroupDescriptor {
-            label: Some("Brush Bing Group 2"),
-            layout: &brush_bgl,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: brush_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&texture_view_2),
-                },
-            ],
-        });
-
         let brush_pipeline_layout = device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Brush Pipeline Layout"),
             bind_group_layouts: &[&brush_bgl],
@@ -284,46 +328,6 @@ impl ReactionDiffusionSystem {
                 ],
             });
 
-        // write to 2
-        let compute_bg_1_to_2 = device_m.create_bind_group(&BindGroupDescriptor {
-            label: Some("Compute Bind Group"),
-            layout: &compute_bgl,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: time_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&texture_view_1),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: BindingResource::TextureView(&texture_view_2),
-                },
-            ],
-        });
-
-        // write to 1
-        let compute_bg_2_to_1 = device_m.create_bind_group(&BindGroupDescriptor {
-            label: Some("Compute Bind Group"),
-            layout: &compute_bgl,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: time_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&texture_view_2),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: BindingResource::TextureView(&texture_view_1),
-                },
-            ],
-        });
-
         let compute_pipeline_layout = device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Compute Pipeline Layout"),
             bind_group_layouts: &[&compute_bgl],
@@ -346,137 +350,17 @@ impl ReactionDiffusionSystem {
 
             brush_buffer,
             brush_bgl,
-            brush_bg_to_source_1,
-            brush_bg_to_source_2,
+
             brush_pipeline,
 
-            texture_source_1,
-            texture_source_2,
-            texture_view_1,
-            texture_view_2,
-
             compute_bgl,
-            compute_bg_1_to_2,
-            compute_bg_2_to_1,
             compute_pipeline,
 
-            use_1_as_source: true,
+            use_ping_as_source: true,
         };
-        self_package.write_pattern_to_starting_space(gpu_res, StartingPattern::Circle);
 
         // return
         self_package
-    }
-
-    fn write_pattern_to_starting_space(&self, gpu_res: &GpuResource, pattern: StartingPattern) {
-        let mut data = vec![0.0; (WIDTH * HEIGHT * 4) as usize]; // all pixels with all RGBA elements 0.0
-
-        match pattern {
-            StartingPattern::Circle => {
-                // loop over all the pixels
-                for y in 0..HEIGHT {
-                    for x in 0..WIDTH {
-                        let pixel_idx = ((y * WIDTH + x) * 4) as usize;
-
-                        // element U everywhere
-                        // element V only in blob
-                        let u = 1.0_f32;
-                        let mut v = 0.0_f32;
-
-                        // blob in the center for element V
-                        let center_x = WIDTH as i32 / 2;
-                        let center_y = HEIGHT as i32 / 2;
-
-                        let dist_x = x as i32 - center_x;
-                        let dist_y = y as i32 - center_y;
-
-                        // TODO the size of the circle can be chosen by the user
-                        if dist_x.abs() * dist_x.abs() + dist_y.abs() * dist_y.abs() < 100 {
-                            // TODO check out standard initializations
-                            v = 1.0; // add element V to the area
-                        }
-
-                        // write the data to the channels
-                        data[pixel_idx + 0] = u;
-                        data[pixel_idx + 1] = v;
-                        data[pixel_idx + 2] = 0.0;
-                        data[pixel_idx + 3] = 1.0;
-                    }
-                }
-            }
-
-            StartingPattern::Square => {
-                // loop over all the pixels
-                for y in 0..HEIGHT {
-                    for x in 0..WIDTH {
-                        let pixel_idx = ((y * WIDTH + x) * 4) as usize;
-
-                        // element U everywhere
-                        // element V only in blob
-                        let u = 1.0_f32;
-                        let mut v = 0.0_f32;
-
-                        // blob in the center for element V
-                        let center_x = WIDTH as i32 / 2;
-                        let center_y = HEIGHT as i32 / 2;
-
-                        let dist_x = x as i32 - center_x;
-                        let dist_y = y as i32 - center_y;
-
-                        if dist_x.abs() < 10 && dist_y.abs() < 10 {
-                            // TODO check out standard initializations
-                            v = 1.0; // add element V to the area
-                        }
-
-                        // write the data to the channels
-                        data[pixel_idx + 0] = u;
-                        data[pixel_idx + 1] = v;
-                        data[pixel_idx + 2] = 0.0;
-                        data[pixel_idx + 3] = 1.0;
-                    }
-                }
-            }
-            StartingPattern::CleanSheet => {}
-        }
-
-        let data_bytes: &[u8] = bytemuck::cast_slice(&data);
-        let layout = TexelCopyBufferLayout {
-            offset: 0,
-            // RGBA32Float = 4 channel * 4 byte per pixel
-            bytes_per_row: Some(4 * 4 * WIDTH),
-            rows_per_image: Some(HEIGHT),
-        };
-
-        let extent = Extent3d {
-            width: WIDTH,
-            height: HEIGHT,
-            depth_or_array_layers: 1,
-        };
-
-        // queue source 1
-        gpu_res.queue.write_texture(
-            TexelCopyTextureInfo {
-                texture: &self.texture_source_1,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: TextureAspect::All,
-            },
-            data_bytes,
-            layout,
-            extent,
-        );
-        // queue source 2
-        gpu_res.queue.write_texture(
-            TexelCopyTextureInfo {
-                texture: &self.texture_source_2,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: TextureAspect::All,
-            },
-            data_bytes,
-            layout,
-            extent,
-        );
     }
 
     pub fn set_brush_parameters(&self, gpu_res: &GpuResource, brush_uniform: &BrushUniform) {
@@ -490,42 +374,55 @@ impl ReactionDiffusionSystem {
         gpu_res: &GpuResource,
         frame: &mut FrameContext,
         paused: bool,
+        ping_view: &TextureView,
+        pong_view: &TextureView,
     ) {
-        // ping pong brush injection
-        let brush_bg = if self.use_1_as_source {
-            &self.brush_bg_to_source_1
-        } else {
-            &self.brush_bg_to_source_2
-        };
-
-        // ping pong compute
-        let compute_bg = if self.use_1_as_source {
-            &self.compute_bg_1_to_2
-        } else {
-            &self.compute_bg_2_to_1
-        };
-
-        if !paused {
-            // Brush injection pass
-            {
-                let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("Brush Compute Pass"),
-                    timestamp_writes: None,
-                });
-
-                cpass.set_pipeline(&self.brush_pipeline);
-                cpass.set_bind_group(0, brush_bg, &[]);
-
-                let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
-                let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
-                cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
-            }
+        let device = &gpu_res.device;
+        // return instead of if statement actually
+        if paused {
+            return;
         }
 
-        // update dt
-        let dt = 0.2;
+        // find out the source and destination ping or pong
+        let (brush_target, compute_source, compute_destination) = if self.use_ping_as_source {
+            (ping_view, ping_view, pong_view)
+        } else {
+            (pong_view, pong_view, ping_view)
+        };
 
-        // TODO make separate functions for these... it is getting out of control
+        // Brush injection pass
+        {
+            // TODO maybe cache it? it looks a bit work for CPU to make a BG every time
+            let brush_bg = device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Brush Bind Group"),
+                layout: &self.brush_bgl,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: self.brush_buffer.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::TextureView(&brush_target),
+                    },
+                ],
+            });
+
+            let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("Brush Compute Pass"),
+                timestamp_writes: None,
+            });
+
+            cpass.set_pipeline(&self.brush_pipeline);
+            cpass.set_bind_group(0, &brush_bg, &[]);
+
+            let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
+            let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
+            cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
+        }
+
+        // time
+        let dt = 0.2;
         let time_uniform = TimeUniform { dt, _pad: [0.0; 3] };
 
         gpu_res
@@ -534,20 +431,39 @@ impl ReactionDiffusionSystem {
 
         // compute pass scope
         {
+            // TODO I think I should cache it
+            let compute_bg = device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Compute Bind Group"),
+                layout: &self.compute_bgl,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: self.time_buffer.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::TextureView(&compute_source),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: BindingResource::TextureView(&compute_destination),
+                    },
+                ],
+            });
             let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("Compute Pass"),
                 timestamp_writes: None,
             });
 
             cpass.set_pipeline(&self.compute_pipeline);
-            cpass.set_bind_group(0, compute_bg, &[]);
+            cpass.set_bind_group(0, &compute_bg, &[]);
 
             let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
             let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
             cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
         }
 
-        self.use_1_as_source = !self.use_1_as_source;
+        self.use_ping_as_source = !self.use_ping_as_source;
     }
 
     // reload and rebuild pipelines if shaders are changed
@@ -590,8 +506,7 @@ impl ReactionDiffusionSystem {
     }
 
     // reset function
-    pub fn reset_and_rerun(&mut self, gpu_res: &GpuResource, pattern: StartingPattern) {
-        self.write_pattern_to_starting_space(gpu_res, pattern);
+    pub fn reset_time(&mut self) {
         self._start_instant = Instant::now();
         self._last_time = 0.0;
     }
@@ -601,11 +516,7 @@ impl ReactionDiffusionSystem {
         (WIDTH, HEIGHT)
     }
 
-    pub fn current_ouput_view(&self) -> &TextureView {
-        if self.use_1_as_source {
-            &self.texture_view_1
-        } else {
-            &self.texture_view_2
-        }
+    pub fn is_ping_source(&self) -> bool {
+        self.use_ping_as_source
     }
 }
