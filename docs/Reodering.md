@@ -89,7 +89,7 @@ Right now the I made it very simple as in Sim -> Display -> Sim -> Display and s
 
 There are two structs, namely, `ReactionDiffusionSimulationNode` that handles the compute and `ReactionDiffusionDisplayNode` that handles the rendering.
 
-The ReactionDiffusionSimulationNode does have has a shared part for now that which makes the display node dependent on compute. I have to get rid of that later. However, right Sim node has a shared logic and a reset logic. While `ReactionDiffusionDisplayNode` has the BGL, pipeline and the sampler. They are all `Option<>` because when creating the shared logic the don't exist.
+Sim node has a simulation logic and a reset logic. While `ReactionDiffusionDisplayNode` has the BGL, pipeline and the sampler. They are all `Option<>` because when creating the shared logic the don't exist.
 
 The `create_rd_shared_nodes` function is meant to construct both structs and the shared logic of course.
 
@@ -111,4 +111,3 @@ The hot reload rebuilds the BG and the pipelines for rendering everytime anythin
 ## Future plans?
 
 I feel like making the BG every frame is a problem. Well not a problem but it must lead to some overhead that is not really necessary. Even though it is working but I should be able to optimize it.
-Then that compute and rendering share resource is bothering me pretty much. Next step I wanna make it right.
