@@ -1,22 +1,25 @@
-use std::{cell::RefCell, rc::Rc};
-
-use wgpu::*;
-
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
-    rd_system::{BrushUniform, ReactionDiffusionSystem, StartingPattern, load_ablsolute_path},
+    rd_system::{
+        BrushUniform, ReactionDiffusionSystem, StartingPattern, load_ablsolute_path,
+        write_pattern_to_starting_space,
+    },
     render_graph::{
         node::{PerFrameParameters, RenderNode},
         resource_registry::ResourceRegistry,
     },
 };
+use std::{cell::RefCell, rc::Rc};
+use wgpu::*;
 
 // RC allows for different owners of the same data
 // RefCell allows to mutate data even if they are immutable
 type ReactionDiffusionShared = Rc<RefCell<ReactionDiffusionSystem>>;
 
+// TODO get rid of the shared logic
 pub struct ReactionDiffusionSimulationNode {
     rd_shared: ReactionDiffusionShared,
+    do_reset: Option<StartingPattern>,
 }
 
 pub struct ReactionDiffusionDisplayNode {
@@ -34,6 +37,7 @@ pub fn create_rd_shared_nodes(
     let shared = Rc::new(RefCell::new(ReactionDiffusionSystem::new(gpu_res)));
     let sim = ReactionDiffusionSimulationNode {
         rd_shared: Rc::clone(&shared),
+        do_reset: Some(StartingPattern::Circle),
     };
     let display = ReactionDiffusionDisplayNode {
         render_bgl: None,
@@ -45,10 +49,8 @@ pub fn create_rd_shared_nodes(
 }
 
 impl ReactionDiffusionSimulationNode {
-    pub fn reset(&mut self, gpu_res: &GpuResource, pattern: StartingPattern) {
-        self.rd_shared
-            .borrow_mut()
-            .reset_and_rerun(gpu_res, pattern);
+    pub fn reset(&mut self, pattern: StartingPattern) {
+        self.do_reset = Some(pattern)
     }
 }
 
@@ -58,9 +60,34 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         "Reaction Diffusion Node (Simulation)"
     }
 
-    fn prepare(&mut self, _registry: &mut ResourceRegistry, _gpu_res: &GpuResource) {
-        // for now nothing because I first wanna make sure the rendering part works!
-        // TODO the bgl + bg and everything
+    fn prepare(&mut self, registry: &mut ResourceRegistry, gpu_res: &GpuResource) {
+        let (w_rd, h_rd) = self.rd_shared.borrow().rd_size();
+
+        registry.storage_texture_creator(
+            "rd ping",
+            gpu_res,
+            w_rd,
+            h_rd,
+            TextureFormat::Rgba32Float,
+        );
+
+        registry.storage_texture_creator(
+            "rd pong",
+            gpu_res,
+            w_rd,
+            h_rd,
+            TextureFormat::Rgba32Float,
+        );
+
+        if let Some(pattern) = self.do_reset.take() {
+            if let (Some(ping), Some(pong)) = (
+                registry.get_texture("rd ping"),
+                registry.get_texture("rd pong"),
+            ) {
+                write_pattern_to_starting_space(gpu_res, &ping.texture, &pong.texture, pattern);
+                self.rd_shared.borrow_mut().reset_time();
+            }
+        }
     }
 
     fn execute(
@@ -76,9 +103,19 @@ impl RenderNode for ReactionDiffusionSimulationNode {
             rd_shared.rd_size()
         };
 
+        if let Some(pattern) = self.do_reset.take() {
+            if let (Some(ping), Some(pong)) = (
+                registry.get_texture("rd ping"),
+                registry.get_texture("rd pong"),
+            ) {
+                write_pattern_to_starting_space(gpu_res, &ping.texture, &pong.texture, pattern);
+                self.rd_shared.borrow_mut().reset_time();
+            } else {
+                eprintln!("do_reset requested but ping/pong are missing");
+            }
+        }
+
         // brush input
-        // Brush doesn't live in state anymore but in execute
-        // execute will be used in state
         let mut brush_uniform = BrushUniform {
             c_x: 0.0,
             c_y: 0.0,
@@ -113,14 +150,37 @@ impl RenderNode for ReactionDiffusionSimulationNode {
             rd_shared.set_brush_parameters(gpu_res, &brush_uniform);
         }
 
-        // do the compute
-        {
-            let mut rd_shared = self.rd_shared.borrow_mut();
-            rd_shared.step_simulation(gpu_res, frame, per_frame_parames.paused);
+        // get ping or pong from registry
+        let (ping_view, pong_view) = {
+            let ping = registry
+                .get_view("rd ping")
+                .expect("rd ping view is not registered")
+                .clone();
+            let pong = registry
+                .get_view("rd pong")
+                .expect("rd pong view is not registered")
+                .clone();
+            (ping, pong)
+        };
 
-            let out_view = rd_shared.current_ouput_view();
-            registry.set_view("rd output", out_view);
-        }
+        let newest_view = {
+            let mut rd_shared = self.rd_shared.borrow_mut();
+            rd_shared.step_simulation(
+                gpu_res,
+                frame,
+                per_frame_parames.paused,
+                &ping_view,
+                &pong_view,
+            );
+
+            if rd_shared.is_ping_source() {
+                &ping_view
+            } else {
+                &pong_view
+            }
+        };
+
+        registry.set_view("rd output", newest_view);
     }
 
     fn called_on_hotreload(&mut self, gpu_res: &GpuResource) {
@@ -220,6 +280,7 @@ impl RenderNode for ReactionDiffusionDisplayNode {
         self.sampler = Some(sampler);
     }
 
+    // runs every frame
     fn execute(
         &mut self,
         registry: &mut ResourceRegistry,
@@ -239,9 +300,10 @@ impl RenderNode for ReactionDiffusionDisplayNode {
         let sampler = self.sampler.as_ref().expect("RD Display sampler not ready");
 
         let rd_view = registry
-            .register_view("rd output")
+            .get_view("rd output")
             .expect("RD output view is not registered!");
 
+        // TODO Do I need to make the bind group every frame? can I cache it?
         let render_bg = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Rendering from BG from  source 1"),
             layout: &render_bgl,
