@@ -6,6 +6,7 @@ use crate::{
     render_graph::{graph::RenderGraph, node::PerFrameParameters},
     shader_watcher::ShaderWatcher,
 };
+use std::fs;
 use wgpu::SurfaceError;
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -67,7 +68,7 @@ impl State {
 
     pub fn reset(&mut self, pattern: StartingPattern) {
         if let Some(sim_node) = self.graph.get_node_mut::<ReactionDiffusionSimulationNode>() {
-            sim_node.reset(&self.gpu_res, pattern);
+            sim_node.reset(pattern);
         } else {
             eprint!("ReactionDiffusionNode not found!");
         }
