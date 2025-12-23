@@ -8,9 +8,10 @@ use wgpu::{
 
 use crate::gpu_resources::{FrameContext, GpuResource};
 
-// Pixels
-const HEIGHT: u32 = 1280;
-const WIDTH: u32 = 1280;
+pub struct SystemConfig {
+    pub width: u32,
+    pub height: u32,
+}
 
 const WG_X: u32 = 16;
 const WG_Y: u32 = 16;
@@ -29,15 +30,17 @@ pub fn write_pattern_to_starting_space(
     texture_1: &Texture,
     texture_2: &Texture,
     pattern: StartingPattern,
+    width: u32,
+    height: u32,
 ) {
-    let mut data = vec![0.0; (WIDTH * HEIGHT * 4) as usize]; // all pixels with all RGBA elements 0.0
+    let mut data = vec![0.0; (width * height * 4) as usize]; // all pixels with all RGBA elements 0.0
 
     match pattern {
         StartingPattern::Circle => {
             // loop over all the pixels
-            for y in 0..HEIGHT {
-                for x in 0..WIDTH {
-                    let pixel_idx = ((y * WIDTH + x) * 4) as usize;
+            for y in 0..height {
+                for x in 0..width {
+                    let pixel_idx = ((y * width + x) * 4) as usize;
 
                     // element U everywhere
                     // element V only in blob
@@ -45,8 +48,8 @@ pub fn write_pattern_to_starting_space(
                     let mut v = 0.0_f32;
 
                     // blob in the center for element V
-                    let center_x = WIDTH as i32 / 2;
-                    let center_y = HEIGHT as i32 / 2;
+                    let center_x = width as i32 / 2;
+                    let center_y = height as i32 / 2;
 
                     let dist_x = x as i32 - center_x;
                     let dist_y = y as i32 - center_y;
@@ -68,9 +71,9 @@ pub fn write_pattern_to_starting_space(
 
         StartingPattern::Square => {
             // loop over all the pixels
-            for y in 0..HEIGHT {
-                for x in 0..WIDTH {
-                    let pixel_idx = ((y * WIDTH + x) * 4) as usize;
+            for y in 0..height {
+                for x in 0..width {
+                    let pixel_idx = ((y * width + x) * 4) as usize;
 
                     // element U everywhere
                     // element V only in blob
@@ -78,8 +81,8 @@ pub fn write_pattern_to_starting_space(
                     let mut v = 0.0_f32;
 
                     // blob in the center for element V
-                    let center_x = WIDTH as i32 / 2;
-                    let center_y = HEIGHT as i32 / 2;
+                    let center_x = width as i32 / 2;
+                    let center_y = height as i32 / 2;
 
                     let dist_x = x as i32 - center_x;
                     let dist_y = y as i32 - center_y;
@@ -104,13 +107,13 @@ pub fn write_pattern_to_starting_space(
     let layout = TexelCopyBufferLayout {
         offset: 0,
         // RGBA32Float = 4 channel * 4 byte per pixel
-        bytes_per_row: Some(4 * 4 * WIDTH),
-        rows_per_image: Some(HEIGHT),
+        bytes_per_row: Some(4 * 4 * width),
+        rows_per_image: Some(height),
     };
 
     let extent = Extent3d {
-        width: WIDTH,
-        height: HEIGHT,
+        width,
+        height,
         depth_or_array_layers: 1,
     };
 
@@ -171,6 +174,9 @@ pub enum StartingPattern {
 
 // Communication between the system and GPU
 pub struct ReactionDiffusionSystem {
+    // config
+    pub sys_config: SystemConfig,
+
     // uniform
     pub time_buffer: Buffer,
     pub _start_instant: Instant,
@@ -190,7 +196,7 @@ pub struct ReactionDiffusionSystem {
 }
 
 impl ReactionDiffusionSystem {
-    pub fn new(gpu_res: &GpuResource) -> Self {
+    pub fn new(gpu_res: &GpuResource, sys_config: SystemConfig) -> Self {
         // importing resources
         let device_m = &gpu_res.device;
 
@@ -344,6 +350,8 @@ impl ReactionDiffusionSystem {
         });
 
         let self_package = Self {
+            sys_config,
+
             time_buffer,
             _start_instant: start_instant,
             _last_time: last_time,
@@ -382,6 +390,8 @@ impl ReactionDiffusionSystem {
         if paused {
             return;
         }
+        // get the size for dispatch
+        let (width, height) = self.rd_size();
 
         // find out the source and destination ping or pong
         let (brush_target, compute_source, compute_destination) = if self.use_ping_as_source {
@@ -416,13 +426,13 @@ impl ReactionDiffusionSystem {
             cpass.set_pipeline(&self.brush_pipeline);
             cpass.set_bind_group(0, &brush_bg, &[]);
 
-            let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
-            let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
+            let workgroup_x = (width + WG_X - 1) / WG_X;
+            let workgroup_y = (height + WG_Y - 1) / WG_Y;
             cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
         }
 
         // time
-        let dt = 0.2;
+        let dt = 0.7;
         let time_uniform = TimeUniform { dt, _pad: [0.0; 3] };
 
         gpu_res
@@ -458,8 +468,8 @@ impl ReactionDiffusionSystem {
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, &compute_bg, &[]);
 
-            let workgroup_x = (WIDTH + WG_X - 1) / WG_X;
-            let workgroup_y = (HEIGHT + WG_Y - 1) / WG_Y;
+            let workgroup_x = (width + WG_X - 1) / WG_X;
+            let workgroup_y = (height + WG_Y - 1) / WG_Y;
             cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
         }
 
@@ -513,7 +523,7 @@ impl ReactionDiffusionSystem {
 
     // a helper function for WIDTH and WEIGHT
     pub fn rd_size(&self) -> (u32, u32) {
-        (WIDTH, HEIGHT)
+        (self.sys_config.width, self.sys_config.height)
     }
 
     pub fn is_ping_source(&self) -> bool {
