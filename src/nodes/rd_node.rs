@@ -1,7 +1,7 @@
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
     rd_system::{
-        BrushUniform, ReactionDiffusionSystem, StartingPattern, load_ablsolute_path,
+        BrushUniform, ReactionDiffusionSystem, StartingPattern, SystemConfig, load_ablsolute_path,
         write_pattern_to_starting_space,
     },
     render_graph::{
@@ -28,8 +28,12 @@ pub fn create_rd_shared_nodes(
     ReactionDiffusionSimulationNode,
     ReactionDiffusionDisplayNode,
 ) {
+    let sys_config = SystemConfig {
+        width: 1280,
+        height: 1280,
+    };
     let sim = ReactionDiffusionSimulationNode {
-        rd_sim: ReactionDiffusionSystem::new(gpu_res),
+        rd_sim: ReactionDiffusionSystem::new(gpu_res, sys_config),
         do_reset: Some(StartingPattern::Circle),
     };
     let display = ReactionDiffusionDisplayNode {
@@ -58,21 +62,21 @@ impl RenderNode for ReactionDiffusionSimulationNode {
     }
 
     fn prepare(&mut self, registry: &mut ResourceRegistry, gpu_res: &GpuResource) {
-        let (w_rd, h_rd) = self.rd_sim.rd_size();
+        let (width, height) = self.rd_sim.rd_size();
 
         registry.storage_texture_creator(
             "rd ping",
             gpu_res,
-            w_rd,
-            h_rd,
+            width,
+            height,
             TextureFormat::Rgba32Float,
         );
 
         registry.storage_texture_creator(
             "rd pong",
             gpu_res,
-            w_rd,
-            h_rd,
+            width,
+            height,
             TextureFormat::Rgba32Float,
         );
 
@@ -81,7 +85,14 @@ impl RenderNode for ReactionDiffusionSimulationNode {
                 registry.get_texture("rd ping"),
                 registry.get_texture("rd pong"),
             ) {
-                write_pattern_to_starting_space(gpu_res, &ping.texture, &pong.texture, pattern);
+                write_pattern_to_starting_space(
+                    gpu_res,
+                    &ping.texture,
+                    &pong.texture,
+                    pattern,
+                    width,
+                    height,
+                );
                 self.rd_sim.reset_time();
             }
         }
@@ -94,14 +105,21 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         frame: &mut FrameContext,
         per_frame_parames: &PerFrameParameters,
     ) {
-        let (w_rd, h_rd) = self.rd_sim.rd_size();
+        let (width, height) = self.rd_sim.rd_size();
 
         if let Some(pattern) = self.do_reset.take() {
             if let (Some(ping), Some(pong)) = (
                 registry.get_texture("rd ping"),
                 registry.get_texture("rd pong"),
             ) {
-                write_pattern_to_starting_space(gpu_res, &ping.texture, &pong.texture, pattern);
+                write_pattern_to_starting_space(
+                    gpu_res,
+                    &ping.texture,
+                    &pong.texture,
+                    pattern,
+                    width,
+                    height,
+                );
                 self.rd_sim.reset_time();
             } else {
                 eprintln!("do_reset requested but ping/pong are missing");
@@ -131,8 +149,8 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
                     // y axis is mirrored because of different (0, 0) point
 
-                    brush_uniform.c_x = nx * w_rd as f32;
-                    brush_uniform.c_y = (1.0 - ny) * h_rd as f32;
+                    brush_uniform.c_x = nx * width as f32;
+                    brush_uniform.c_y = (1.0 - ny) * height as f32;
                 }
             }
         }
