@@ -100,7 +100,19 @@ pub fn write_pattern_to_starting_space(
                 }
             }
         }
-        StartingPattern::CleanSheet => {}
+        StartingPattern::CleanSheet => {
+            for y in 0..height {
+                for x in 0..width {
+                    let pixel_idx = ((y * width + x) * 4) as usize;
+
+                    // a clean sheet only out of element U
+                    data[pixel_idx + 0] = 1.0;
+                    data[pixel_idx + 0] = 0.0;
+                    data[pixel_idx + 0] = 0.0;
+                    data[pixel_idx + 0] = 1.0;
+                }
+            }
+        }
     }
 
     let data_bytes: &[u8] = bytemuck::cast_slice(&data);
