@@ -8,7 +8,7 @@ pub struct TextureResource {
 }
 
 pub struct ResourceRegistry {
-    textures: HashMap<String, TextureResource>, // holds offscreen textures
+    textures: HashMap<String, TextureResource>,
     views: HashMap<String, TextureView>,
 }
 
