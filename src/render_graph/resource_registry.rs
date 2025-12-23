@@ -35,6 +35,7 @@ impl ResourceRegistry {
 
     // does it exist? if a texture with name doesn't exist create it now
     // this is used for display
+    #[allow(dead_code)]
     pub fn color_texture_creator(&mut self, name: &str, gpu_res: &GpuResource) {
         if self.textures.contains_key(name) {
             return;
