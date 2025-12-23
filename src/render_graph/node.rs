@@ -14,8 +14,18 @@ pub struct PerFrameParameters {
     pub debug_mode: bool,
 }
 
+// Compute pass must always come before Render pass
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PassType {
+    Compute,
+    Render,
+}
+
 pub trait RenderNode {
     fn name(&self) -> &str;
+
+    // Give every node its type so the engine knows the oder of execution.
+    fn pass_type(&self) -> PassType;
 
     fn prepare(&mut self, _registry: &mut ResourceRegistry, _gpu_res: &GpuResource) {}
 
@@ -25,7 +35,7 @@ pub trait RenderNode {
         registry: &mut ResourceRegistry,
         gpu_res: &GpuResource,
         frame: &mut FrameContext,
-        per_frame_parames: &PerFrameParameters,
+        per_frame_parameters: &PerFrameParameters,
     );
 
     // called when shaders are reloded
