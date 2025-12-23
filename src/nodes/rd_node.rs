@@ -11,6 +11,10 @@ use crate::{
 };
 use wgpu::*;
 
+const TEX_RD_PING: &str = "rd ping";
+const TEX_RD_PONG: &str = "rd pong";
+const TEX_RD_OUTPUT: &str = "rd output";
+
 pub struct ReactionDiffusionSimulationNode {
     rd_sim: ReactionDiffusionSystem,
     do_reset: Option<StartingPattern>,
@@ -65,7 +69,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         let (width, height) = self.rd_sim.rd_size();
 
         registry.storage_texture_creator(
-            "rd ping",
+            TEX_RD_PING,
             gpu_res,
             width,
             height,
@@ -73,7 +77,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         );
 
         registry.storage_texture_creator(
-            "rd pong",
+            TEX_RD_PONG,
             gpu_res,
             width,
             height,
@@ -82,8 +86,8 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
         if let Some(pattern) = self.do_reset.take() {
             if let (Some(ping), Some(pong)) = (
-                registry.get_texture("rd ping"),
-                registry.get_texture("rd pong"),
+                registry.get_texture(TEX_RD_PING),
+                registry.get_texture(TEX_RD_PONG),
             ) {
                 write_pattern_to_starting_space(
                     gpu_res,
@@ -109,8 +113,8 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
         if let Some(pattern) = self.do_reset.take() {
             if let (Some(ping), Some(pong)) = (
-                registry.get_texture("rd ping"),
-                registry.get_texture("rd pong"),
+                registry.get_texture(TEX_RD_PING),
+                registry.get_texture(TEX_RD_PONG),
             ) {
                 write_pattern_to_starting_space(
                     gpu_res,
@@ -160,11 +164,11 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         // get ping or pong and clone to shorten borrow
         let (ping_view, pong_view) = {
             let ping = registry
-                .get_view("rd ping")
+                .get_view(TEX_RD_PING)
                 .expect("rd ping view is not registered")
                 .clone();
             let pong = registry
-                .get_view("rd pong")
+                .get_view(TEX_RD_PONG)
                 .expect("rd pong view is not registered")
                 .clone();
             (ping, pong)
@@ -186,7 +190,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
             }
         };
 
-        registry.set_view("rd output", newest_view);
+        registry.set_view(TEX_RD_OUTPUT, newest_view);
     }
 
     fn called_on_hotreload(&mut self, gpu_res: &GpuResource) {
@@ -310,7 +314,7 @@ impl RenderNode for ReactionDiffusionDisplayNode {
         let sampler = self.sampler.as_ref().expect("RD Display sampler not ready");
 
         let rd_view = registry
-            .get_view("rd output")
+            .get_view(TEX_RD_OUTPUT)
             .expect("RD output view is not registered!");
 
         // TODO Do I need to make the bind group every frame? can I cache it?
