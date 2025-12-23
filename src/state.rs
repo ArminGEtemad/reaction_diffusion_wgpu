@@ -6,7 +6,6 @@ use crate::{
     render_graph::{graph::RenderGraph, node::PerFrameParameters},
     shader_watcher::ShaderWatcher,
 };
-use std::fs;
 use wgpu::SurfaceError;
 use winit::{dpi::PhysicalSize, window::Window};
 
