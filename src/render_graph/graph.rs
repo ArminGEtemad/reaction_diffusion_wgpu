@@ -1,14 +1,19 @@
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
     render_graph::{
-        node::{PerFrameParameters, RenderNode},
+        node::{PassType, PerFrameParameters, RenderNode},
         resource_registry::ResourceRegistry,
     },
 };
 
+struct NodeEntry {
+    pass_type: PassType,
+    node: Box<dyn RenderNode>,
+}
+
 pub struct RenderGraph {
-    pub registry: ResourceRegistry,
-    pub nodes: Vec<Box<dyn RenderNode>>,
+    registry: ResourceRegistry,
+    nodes: Vec<NodeEntry>,
 }
 
 impl RenderGraph {
@@ -20,12 +25,19 @@ impl RenderGraph {
     }
 
     pub fn add_node<N: RenderNode + 'static>(&mut self, node: N) {
-        self.nodes.push(Box::new(node));
+        let pass_type = node.pass_type();
+        let entry = NodeEntry {
+            pass_type,
+            node: Box::new(node),
+        };
+        self.nodes.push(entry);
+
+        self.nodes.sort_by_key(|e| e.pass_type);
     }
 
     pub fn prepare(&mut self, gpu_res: &GpuResource) {
-        for node in self.nodes.iter_mut() {
-            node.prepare(&mut self.registry, gpu_res);
+        for entry in self.nodes.iter_mut() {
+            entry.node.prepare(&mut self.registry, gpu_res);
         }
     }
 
@@ -35,25 +47,28 @@ impl RenderGraph {
         frame: &mut FrameContext,
         per_frame_parameters: &PerFrameParameters,
     ) {
-        for node in self.nodes.iter_mut() {
+        for entry in self.nodes.iter_mut() {
             if per_frame_parameters.debug_mode {
-                println!("Executing {}", node.name());
+                println!("Executing node: {}", entry.node.name());
             }
-            node.execute(&mut self.registry, gpu_res, frame, per_frame_parameters);
+
+            entry
+                .node
+                .execute(&mut self.registry, gpu_res, frame, per_frame_parameters);
         }
     }
 
     pub fn notify_on_hotreload_graph(&mut self, gpu_res: &GpuResource) {
-        for node in self.nodes.iter_mut() {
-            node.called_on_hotreload(gpu_res);
+        for entry in self.nodes.iter_mut() {
+            entry.node.called_on_hotreload(gpu_res);
         }
     }
 
     // getting a mutabe refrence to a node in other scripts
     pub fn get_node_mut<N: 'static>(&mut self) -> Option<&mut N> {
-        for node in self.nodes.iter_mut() {
-            if let Some(n) = node.as_any().downcast_mut::<N>() {
-                return Some(n);
+        for entry in self.nodes.iter_mut() {
+            if let Some(node) = entry.node.as_any().downcast_mut::<N>() {
+                return Some(node);
             }
         }
         None

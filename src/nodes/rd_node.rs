@@ -5,11 +5,10 @@ use crate::{
         write_pattern_to_starting_space,
     },
     render_graph::{
-        node::{PerFrameParameters, RenderNode},
+        node::{PassType, PerFrameParameters, RenderNode},
         resource_registry::ResourceRegistry,
     },
 };
-
 use wgpu::*;
 
 pub struct ReactionDiffusionSimulationNode {
@@ -52,6 +51,10 @@ impl ReactionDiffusionSimulationNode {
 impl RenderNode for ReactionDiffusionSimulationNode {
     fn name(&self) -> &str {
         "Reaction Diffusion Node (Simulation)"
+    }
+
+    fn pass_type(&self) -> PassType {
+        PassType::Compute
     }
 
     fn prepare(&mut self, registry: &mut ResourceRegistry, gpu_res: &GpuResource) {
@@ -182,6 +185,10 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 impl RenderNode for ReactionDiffusionDisplayNode {
     fn name(&self) -> &str {
         "Reaction Diffusion Node (Display)"
+    }
+
+    fn pass_type(&self) -> PassType {
+        PassType::Render
     }
 
     fn prepare(&mut self, _registry: &mut ResourceRegistry, gpu_res: &GpuResource) {
