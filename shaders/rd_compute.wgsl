@@ -38,7 +38,17 @@ fn laplacian(texture: texture_2d<f32>, x_y: vec2<i32>) -> vec2<f32> {
     let left = read_u_v(texture, x_y + vec2<i32>(-1, 0));
     let right = read_u_v(texture, x_y + vec2<i32>(1, 0));
 
-    let laplace = (up + down + left + right) - 4.0 * center;
+    let up_left = read_u_v(texture, x_y + vec2<i32>(-1, -1));
+    let up_right = read_u_v(texture, x_y + vec2<i32>(1, -1));
+    let down_left = read_u_v(texture, x_y + vec2<i32>(-1, 1));
+    let down_right = read_u_v(texture, x_y + vec2<i32>(1, 1));
+
+    let cross_term = 4.0 * (up + down + left + right); 
+    let diag_term = up_left + up_right + down_left + down_right;
+
+
+    let laplace = (cross_term + diag_term - 20.0 * center) / 6.0;
+    // let old_laplace = (cross_term - 16.0 * center) / 4.0;
     return laplace;
 }
 
