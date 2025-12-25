@@ -209,9 +209,11 @@ pub struct ReactionDiffusionSystem {
     pub brush_bgl: BindGroupLayout,
     pub brush_pipeline: ComputePipeline,
 
-    // compute
-    pub compute_bgl: BindGroupLayout,
-    pub compute_pipeline: ComputePipeline,
+    // compute for predictor and corrector
+    pub compute_bgl_stage_1: BindGroupLayout,
+    pub compute_bgl_stage_2: BindGroupLayout, // I tried one BGL but got 'module not valid error'
+    pub compute_pipeline_stage_1: ComputePipeline,
+    pub compute_pipeline_stage_2: ComputePipeline,
 
     // ping or pong :)
     pub use_ping_as_source: bool,
@@ -226,6 +228,11 @@ impl ReactionDiffusionSystem {
         let time_uniform = TimeUniform {
             dt: 0.0,
             _pad: [0.0; 3],
+        };
+
+        let sim_parameters = SimulationParameters {
+            dt_per_step: 0.5,
+            substeps_per_frame: 5,
         };
 
         let time_buffer = device_m.create_buffer_init(&BufferInitDescriptor {
@@ -312,7 +319,48 @@ impl ReactionDiffusionSystem {
         });
 
         // RD compute
-        let compute_bgl =
+        let compute_bgl_stage_1 =
+            device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("Compute Bind Group Layout Stage 1"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        // time uniform buffer binding 0
+                        binding: 0,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: NonZeroU64::new(
+                                std::mem::size_of::<TimeUniform>() as u64
+                            ),
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        // source (sampled)
+                        binding: 1,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::StorageTexture {
+                            access: StorageTextureAccess::WriteOnly,
+                            format: TextureFormat::Rgba32Float,
+                            view_dimension: TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
+        let compute_bgl_stage_2 =
             device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("Compute Bind Group Layout"),
                 entries: &[
@@ -341,8 +389,18 @@ impl ReactionDiffusionSystem {
                         count: None,
                     },
                     BindGroupLayoutEntry {
-                        // dst (storage)
                         binding: 2,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        // dst (storage)
+                        binding: 3,
                         visibility: ShaderStages::COMPUTE,
                         ty: BindingType::StorageTexture {
                             access: StorageTextureAccess::WriteOnly,
@@ -354,25 +412,39 @@ impl ReactionDiffusionSystem {
                 ],
             });
 
-        let compute_pipeline_layout = device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Compute Pipeline Layout"),
-            bind_group_layouts: &[&compute_bgl],
-            push_constant_ranges: &[],
-        });
+        let compute_pipeline_layout_stage_1 =
+            device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
+                label: Some("Compute Pipeline Layout Stage 1"),
+                bind_group_layouts: &[&compute_bgl_stage_1],
+                push_constant_ranges: &[],
+            });
 
-        let compute_pipeline = device_m.create_compute_pipeline(&ComputePipelineDescriptor {
-            label: Some("Compute Pipeline"),
-            layout: Some(&compute_pipeline_layout),
-            module: &compute_shader,
-            entry_point: Some("main"),
-            compilation_options: PipelineCompilationOptions::default(),
-            cache: None,
-        });
+        let compute_pipeline_stage_1 =
+            device_m.create_compute_pipeline(&ComputePipelineDescriptor {
+                label: Some("Compute Pipeline Stage 1"),
+                layout: Some(&compute_pipeline_layout_stage_1),
+                module: &compute_shader,
+                entry_point: Some("main_predictor"),
+                compilation_options: PipelineCompilationOptions::default(),
+                cache: None,
+            });
 
-        let sim_parameters = SimulationParameters {
-            dt_per_step: 0.2,
-            substeps_per_frame: 5,
-        };
+        let compute_pipeline_layout_stage_2 =
+            device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
+                label: Some("Compute Pipeline Layout Stage 2"),
+                bind_group_layouts: &[&compute_bgl_stage_2],
+                push_constant_ranges: &[],
+            });
+
+        let compute_pipeline_stage_2 =
+            device_m.create_compute_pipeline(&ComputePipelineDescriptor {
+                label: Some("Compute Pipeline Stage 2"),
+                layout: Some(&compute_pipeline_layout_stage_2),
+                module: &compute_shader,
+                entry_point: Some("main_corrector"),
+                compilation_options: PipelineCompilationOptions::default(),
+                cache: None,
+            });
 
         let self_package = Self {
             sys_config,
@@ -388,8 +460,10 @@ impl ReactionDiffusionSystem {
 
             brush_pipeline,
 
-            compute_bgl,
-            compute_pipeline,
+            compute_bgl_stage_1,
+            compute_bgl_stage_2,
+            compute_pipeline_stage_1,
+            compute_pipeline_stage_2,
 
             use_ping_as_source: true,
         };
@@ -464,6 +538,7 @@ impl ReactionDiffusionSystem {
         frame: &mut FrameContext,
         ping_view: &TextureView,
         pong_view: &TextureView,
+        temp_view: &TextureView,
     ) {
         let device = &gpu_res.device;
 
@@ -476,37 +551,75 @@ impl ReactionDiffusionSystem {
         } else {
             (pong_view, ping_view)
         };
-
-        // TODO I think I should cache it
-        let compute_bg = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Compute Bind Group"),
-            layout: &self.compute_bgl,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: self.time_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&compute_source),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: BindingResource::TextureView(&compute_destination),
-                },
-            ],
-        });
-        let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
-            label: Some("Compute Pass"),
-            timestamp_writes: None,
-        });
-
-        cpass.set_pipeline(&self.compute_pipeline);
-        cpass.set_bind_group(0, &compute_bg, &[]);
-
         let workgroup_x = (width + WG_X - 1) / WG_X;
         let workgroup_y = (height + WG_Y - 1) / WG_Y;
-        cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
+
+        // scope calculating the predictor
+        {
+            // TODO I think I should cache it
+            let compute_bg = device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Compute Bind Group"),
+                layout: &self.compute_bgl_stage_1,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: self.time_buffer.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::TextureView(&compute_source),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: BindingResource::TextureView(&temp_view),
+                    },
+                ],
+            });
+
+            let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("Compute Pass Stage 1"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.compute_pipeline_stage_1);
+            cpass.set_bind_group(0, &compute_bg, &[]);
+
+            cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
+        }
+
+        // scope calculating the corrector
+        {
+            // TODO I think I should cache it
+            let compute_bg = device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Compute Bind Group"),
+                layout: &self.compute_bgl_stage_2,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: self.time_buffer.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::TextureView(&compute_source),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: BindingResource::TextureView(&temp_view),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: BindingResource::TextureView(&compute_destination),
+                    },
+                ],
+            });
+            let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("Compute Pass Stage 2"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.compute_pipeline_stage_2);
+            cpass.set_bind_group(0, &compute_bg, &[]);
+
+            cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
+        }
 
         self.use_ping_as_source = !self.use_ping_as_source;
     }
@@ -520,6 +633,7 @@ impl ReactionDiffusionSystem {
         paused: bool,
         ping_view: &TextureView,
         pong_view: &TextureView,
+        temp_view: &TextureView,
     ) {
         if paused {
             return;
@@ -531,7 +645,7 @@ impl ReactionDiffusionSystem {
         let substeps = self.sim_parameters.substeps_per_frame.max(1);
 
         for _ in 0..substeps {
-            self.single_step_sim(gpu_res, frame, ping_view, pong_view);
+            self.single_step_sim(gpu_res, frame, ping_view, pong_view, temp_view);
         }
     }
 
@@ -544,23 +658,44 @@ impl ReactionDiffusionSystem {
         });
 
         // "new layout" it is the same same but different (after changes in the shader)
-        let compute_pipeline_layout =
+        let compute_pipeline_layout_stage_1 =
             gpu_res
                 .device
                 .create_pipeline_layout(&PipelineLayoutDescriptor {
-                    label: Some("Compute Pipeline Layout (Rebuilding"),
-                    bind_group_layouts: &[&self.compute_bgl],
+                    label: Some("Compute Pipeline Layout Stage 1 (Rebuilding"),
+                    bind_group_layouts: &[&self.compute_bgl_stage_1],
                     push_constant_ranges: &[],
                 });
 
-        self.compute_pipeline =
+        let compute_pipeline_layout_stage_2 =
+            gpu_res
+                .device
+                .create_pipeline_layout(&PipelineLayoutDescriptor {
+                    label: Some("Compute Pipeline Layout Stage 2 (Rebuilding"),
+                    bind_group_layouts: &[&self.compute_bgl_stage_2],
+                    push_constant_ranges: &[],
+                });
+
+        self.compute_pipeline_stage_1 =
             gpu_res
                 .device
                 .create_compute_pipeline(&ComputePipelineDescriptor {
-                    label: Some("Compute Pipeline (Rebuilding)"),
-                    layout: Some(&compute_pipeline_layout),
+                    label: Some("Compute Pipeline Stage 1 (Rebuilding)"),
+                    layout: Some(&compute_pipeline_layout_stage_1),
                     module: &compute_shader,
-                    entry_point: Some("main"),
+                    entry_point: Some("main_predictor"),
+                    compilation_options: PipelineCompilationOptions::default(),
+                    cache: None,
+                });
+
+        self.compute_pipeline_stage_2 =
+            gpu_res
+                .device
+                .create_compute_pipeline(&ComputePipelineDescriptor {
+                    label: Some("Compute Pipeline Stage 2(Rebuilding)"),
+                    layout: Some(&compute_pipeline_layout_stage_2),
+                    module: &compute_shader,
+                    entry_point: Some("main_corrector"),
                     compilation_options: PipelineCompilationOptions::default(),
                     cache: None,
                 });
