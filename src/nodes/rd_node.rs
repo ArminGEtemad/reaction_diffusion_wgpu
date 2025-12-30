@@ -184,7 +184,7 @@ impl RenderNode for ReactionDiffusionBrushNode {
         frame: &mut FrameContext,
         per_frame_parameters: &PerFrameParameters,
     ) {
-        if !per_frame_parameters.mouse_down {
+        if !per_frame_parameters.mouse_down || per_frame_parameters.paused {
             return;
         }
 
