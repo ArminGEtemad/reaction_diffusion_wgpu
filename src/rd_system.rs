@@ -114,9 +114,9 @@ pub fn write_pattern_to_starting_space(
 
                     // a clean sheet only out of element U
                     data[pixel_idx + 0] = 1.0;
-                    data[pixel_idx + 0] = 0.0;
-                    data[pixel_idx + 0] = 0.0;
-                    data[pixel_idx + 0] = 1.0;
+                    data[pixel_idx + 1] = 0.0;
+                    data[pixel_idx + 2] = 0.0;
+                    data[pixel_idx + 3] = 1.0;
                 }
             }
         }
