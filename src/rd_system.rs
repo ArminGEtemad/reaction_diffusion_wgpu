@@ -210,8 +210,7 @@ pub struct ReactionDiffusionSystem {
     pub brush_pipeline: ComputePipeline,
 
     // compute for predictor and corrector
-    pub compute_bgl_stage_1: BindGroupLayout,
-    pub compute_bgl_stage_2: BindGroupLayout, // I tried one BGL but got 'module not valid error'
+    pub compute_bgl: BindGroupLayout,
     pub compute_pipeline_stage_1: ComputePipeline,
     pub compute_pipeline_stage_2: ComputePipeline,
 
@@ -319,12 +318,12 @@ impl ReactionDiffusionSystem {
         });
 
         // RD compute
-        let compute_bgl_stage_1 =
+        let compute_bgl =
             device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Compute Bind Group Layout Stage 1"),
+                label: Some("Compute Bind Group Layout"),
                 entries: &[
                     BindGroupLayoutEntry {
-                        // time uniform buffer binding 0
+                        // uniform time buffer binding 0
                         binding: 0,
                         visibility: ShaderStages::COMPUTE,
                         ty: BindingType::Buffer {
@@ -337,7 +336,7 @@ impl ReactionDiffusionSystem {
                         count: None,
                     },
                     BindGroupLayoutEntry {
-                        // source (sampled)
+                        // sampled source texture n binding 1
                         binding: 1,
                         visibility: ShaderStages::COMPUTE,
                         ty: BindingType::Texture {
@@ -348,58 +347,19 @@ impl ReactionDiffusionSystem {
                         count: None,
                     },
                     BindGroupLayoutEntry {
-                        binding: 3,
+                        // storage texture declared as read and write so it can be used by RK2 second stage
+                        // binding 2
+                        binding: 2,
                         visibility: ShaderStages::COMPUTE,
                         ty: BindingType::StorageTexture {
-                            access: StorageTextureAccess::WriteOnly,
+                            access: StorageTextureAccess::ReadWrite,
                             format: TextureFormat::Rgba32Float,
                             view_dimension: TextureViewDimension::D2,
                         },
                         count: None,
                     },
-                ],
-            });
-
-        let compute_bgl_stage_2 =
-            device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Compute Bind Group Layout"),
-                entries: &[
                     BindGroupLayoutEntry {
-                        // time uniform buffer binding 0
-                        binding: 0,
-                        visibility: ShaderStages::COMPUTE,
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: NonZeroU64::new(
-                                std::mem::size_of::<TimeUniform>() as u64
-                            ),
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        // source (sampled)
-                        binding: 1,
-                        visibility: ShaderStages::COMPUTE,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float { filterable: false },
-                            view_dimension: TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: ShaderStages::COMPUTE,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float { filterable: false },
-                            view_dimension: TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        // dst (storage)
+                        // storage texture write only for the final result
                         binding: 3,
                         visibility: ShaderStages::COMPUTE,
                         ty: BindingType::StorageTexture {
@@ -415,7 +375,7 @@ impl ReactionDiffusionSystem {
         let compute_pipeline_layout_stage_1 =
             device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("Compute Pipeline Layout Stage 1"),
-                bind_group_layouts: &[&compute_bgl_stage_1],
+                bind_group_layouts: &[&compute_bgl],
                 push_constant_ranges: &[],
             });
 
@@ -432,7 +392,7 @@ impl ReactionDiffusionSystem {
         let compute_pipeline_layout_stage_2 =
             device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("Compute Pipeline Layout Stage 2"),
-                bind_group_layouts: &[&compute_bgl_stage_2],
+                bind_group_layouts: &[&compute_bgl],
                 push_constant_ranges: &[],
             });
 
@@ -460,8 +420,7 @@ impl ReactionDiffusionSystem {
 
             brush_pipeline,
 
-            compute_bgl_stage_1,
-            compute_bgl_stage_2,
+            compute_bgl,
             compute_pipeline_stage_1,
             compute_pipeline_stage_2,
 
@@ -558,8 +517,8 @@ impl ReactionDiffusionSystem {
         {
             // TODO I think I should cache it
             let compute_bg = device.create_bind_group(&BindGroupDescriptor {
-                label: Some("Compute Bind Group"),
-                layout: &self.compute_bgl_stage_1,
+                label: Some("Compute Bind Group First Stage"),
+                layout: &self.compute_bgl,
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
@@ -570,8 +529,12 @@ impl ReactionDiffusionSystem {
                         resource: BindingResource::TextureView(&compute_source),
                     },
                     BindGroupEntry {
-                        binding: 3,
+                        binding: 2,
                         resource: BindingResource::TextureView(&temp_view),
+                    },
+                    BindGroupEntry {
+                        binding: 3, // not used by the predictor only corrector
+                        resource: BindingResource::TextureView(&compute_destination),
                     },
                 ],
             });
@@ -590,8 +553,8 @@ impl ReactionDiffusionSystem {
         {
             // TODO I think I should cache it
             let compute_bg = device.create_bind_group(&BindGroupDescriptor {
-                label: Some("Compute Bind Group"),
-                layout: &self.compute_bgl_stage_2,
+                label: Some("Compute Bind Group Second Stage"),
+                layout: &self.compute_bgl,
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
@@ -663,7 +626,7 @@ impl ReactionDiffusionSystem {
                 .device
                 .create_pipeline_layout(&PipelineLayoutDescriptor {
                     label: Some("Compute Pipeline Layout Stage 1 (Rebuilding"),
-                    bind_group_layouts: &[&self.compute_bgl_stage_1],
+                    bind_group_layouts: &[&self.compute_bgl],
                     push_constant_ranges: &[],
                 });
 
@@ -672,7 +635,7 @@ impl ReactionDiffusionSystem {
                 .device
                 .create_pipeline_layout(&PipelineLayoutDescriptor {
                     label: Some("Compute Pipeline Layout Stage 2 (Rebuilding"),
-                    bind_group_layouts: &[&self.compute_bgl_stage_2],
+                    bind_group_layouts: &[&self.compute_bgl],
                     push_constant_ranges: &[],
                 });
 
