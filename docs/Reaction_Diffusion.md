@@ -38,20 +38,7 @@ which corresponds to
 \nabla^2 f(x, y) \approx f(x, y - 1) + f(x - 1, y) - 4 f(x, y) + f(x + 1, y) + f(x, y + 1)
 ```
 
-In the numeric literature, we find the same equation but instead of $1$ we have an infinitesimal element of $h$. The whole RHS of the equation is also multiplide with $1/h^2$. Here we simply say $h = 1$ which is the grid spacing. This is coded in compute shader:
-
-```wgsl
-fn laplacian(texture: texture_2d<f32>, x_y: vec2<i32>) -> vec2<f32> {
-    let center = read_u_v(texture, x_y);
-    let up = read_u_v(texture, x_y + vec2<i32>(0, -1));
-    let down = read_u_v(texture, x_y + vec2<i32>(0, 1));
-    let left = read_u_v(texture, x_y + vec2<i32>(-1, 0));
-    let right = read_u_v(texture, x_y + vec2<i32>(1, 0));
-
-    let laplace = (up + down + left + right) - 4.0 * center;
-    return laplace;
-}
-```
+In the numeric literature, we find the same equation but instead of $1$ we have an infinitesimal element of $h$. The whole RHS of the equation is also multiplide with $1/h^2$. Here we simply say $h = 1$ which is the grid spacing.
 
 ### 9 point stencil
 
@@ -87,8 +74,43 @@ L_{2D, 9 point} = \frac{1}{6} \begin{pmatrix}
 \end{pmatrix}
 ```
 
-The same system with a 9 point stencil looks like ![pattern_9point](Patterns/9_point_stencil.png)
+The same system with a 9 point stencil looks like
+
+![pattern_9point](Patterns/9_point_stencil.png)
 
 While the identical system solved by 5 point stencil looks like ![pattern_5point](Patterns/5_point_stencil.png)
 
 TOTALLY DIFFERENT. I am not using the nine point because the patterns look cooler but because I get a more accurate result where the Laplacian does not ignore the diagonal neighbors and thus distorting the pattern. Of course, it make the GPU to read more texture but I think with modern GPUs it should be no problem.
+
+## Numerics
+
+### Theory
+
+To calculate this differential equation I decided to go with Heun method (RK2) which is mostly just averaged over Euler forward and backward. But this tiny tweak makes the numerics more stable.
+It goes as following:
+For a differential equation with a known initial value $y(t = 0) = y_0$:
+
+```math
+\frac{dy}{dt} = f(y, t)
+```
+
+we have the predictor:
+
+```math
+y^*_{i+1} = y_i + h f(y_i, t_i)
+```
+
+and the corrector:
+
+```math
+y_{i+1} = y_i + \frac{h}{2} (f(y_i, t_i) + f(y^*_{i+1}, t_{i+1}))
+```
+
+### Implementation
+
+For each I stage (predictor, corrector) make a separate compute pass and entry. However, I only need one bind group layout as following:
+
+- 0 : uniform binding for `dt`
+- 1 : sampled source `texture_2d<f32>`
+- 2 : storage texture for the predictor and source texture for corrector, meaning that it has to be declared as `read_write` for `texture_storage_2d`.
+- 3 : sotrage texture for corrector and ignored by predictor, meaning it is a `write` only `texture_storage_2d`.
