@@ -204,11 +204,6 @@ pub struct ReactionDiffusionSystem {
     pub _start_instant: Instant,
     pub _last_time: f32,
 
-    // brush
-    pub brush_buffer: Buffer,
-    pub brush_bgl: BindGroupLayout,
-    pub brush_pipeline: ComputePipeline,
-
     // compute for predictor and corrector
     pub compute_bgl: BindGroupLayout,
     pub compute_pipeline_stage_1: ComputePipeline,
@@ -259,62 +254,11 @@ impl ReactionDiffusionSystem {
 
         // shader modules
         // a run time shader loader instead of compile time which makes the program ready for hot reload
-        let brush_shader_path = load_ablsolute_path("shaders/brush_compute.wgsl");
         let compute_shader_path = load_ablsolute_path("shaders/rd_compute.wgsl");
 
-        let brush_shader = device_m.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Brush Shader Module"),
-            source: ShaderSource::Wgsl(brush_shader_path.into()),
-        });
         let compute_shader = device_m.create_shader_module(ShaderModuleDescriptor {
             label: Some("Compute Shader Module"),
             source: ShaderSource::Wgsl(compute_shader_path.into()),
-        });
-
-        // brush compute
-        let brush_bgl = device_m.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Brush Bind Group Layout"),
-            entries: &[
-                BindGroupLayoutEntry {
-                    // brush uniform
-                    binding: 0,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(
-                            std::mem::size_of::<BrushUniform>() as u64
-                        ),
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    // texture
-                    binding: 1,
-                    visibility: ShaderStages::COMPUTE,
-                    ty: BindingType::StorageTexture {
-                        access: StorageTextureAccess::ReadWrite,
-                        format: TextureFormat::Rgba32Float,
-                        view_dimension: TextureViewDimension::D2,
-                    },
-                    count: None,
-                },
-            ],
-        });
-
-        let brush_pipeline_layout = device_m.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("Brush Pipeline Layout"),
-            bind_group_layouts: &[&brush_bgl],
-            push_constant_ranges: &[],
-        });
-
-        let brush_pipeline = device_m.create_compute_pipeline(&ComputePipelineDescriptor {
-            label: Some("Brush Pipeline"),
-            layout: Some(&brush_pipeline_layout),
-            module: &brush_shader,
-            entry_point: Some("main"),
-            compilation_options: PipelineCompilationOptions::default(),
-            cache: None,
         });
 
         // RD compute
@@ -415,11 +359,6 @@ impl ReactionDiffusionSystem {
             _start_instant: start_instant,
             _last_time: last_time,
 
-            brush_buffer,
-            brush_bgl,
-
-            brush_pipeline,
-
             compute_bgl,
             compute_pipeline_stage_1,
             compute_pipeline_stage_2,
@@ -429,56 +368,6 @@ impl ReactionDiffusionSystem {
 
         // return
         self_package
-    }
-
-    pub fn set_brush_parameters(&self, gpu_res: &GpuResource, brush_uniform: &BrushUniform) {
-        gpu_res
-            .queue
-            .write_buffer(&self.brush_buffer, 0, bytemuck::bytes_of(brush_uniform));
-    }
-
-    fn apply_brush(
-        &mut self,
-        gpu_res: &GpuResource,
-        frame: &mut FrameContext,
-        ping_view: &TextureView,
-        pong_view: &TextureView,
-    ) {
-        let device = &gpu_res.device;
-        let (width, height) = self.rd_size();
-
-        let brush_target = if self.use_ping_as_source {
-            ping_view
-        } else {
-            pong_view
-        };
-
-        let brush_bg = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Brush Bind Group"),
-            layout: &self.brush_bgl,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: self.brush_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&brush_target),
-                },
-            ],
-        });
-
-        let mut cpass = frame.encoder.begin_compute_pass(&ComputePassDescriptor {
-            label: Some("Brush Compute Pass"),
-            timestamp_writes: None,
-        });
-
-        cpass.set_pipeline(&self.brush_pipeline);
-        cpass.set_bind_group(0, &brush_bg, &[]);
-
-        let workgroup_x = (width + WG_X - 1) / WG_X;
-        let workgroup_y = (height + WG_Y - 1) / WG_Y;
-        cpass.dispatch_workgroups(workgroup_x, workgroup_y, 1);
     }
 
     fn update_time_uniform(&self, gpu_res: &GpuResource) {
@@ -602,7 +491,6 @@ impl ReactionDiffusionSystem {
             return;
         }
 
-        self.apply_brush(gpu_res, frame, ping_view, pong_view);
         self.update_time_uniform(gpu_res);
 
         let substeps = self.sim_parameters.substeps_per_frame.max(1);
