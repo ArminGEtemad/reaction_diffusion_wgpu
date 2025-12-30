@@ -13,6 +13,7 @@ use wgpu::*;
 
 const TEX_RD_PING: &str = "rd ping";
 const TEX_RD_PONG: &str = "rd pong";
+const TEX_RD_TEMP: &str = "rd temp"; // needed for RK2 predictor, corrector
 const TEX_RD_OUTPUT: &str = "rd output";
 
 pub struct ReactionDiffusionSimulationNode {
@@ -78,6 +79,14 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
         registry.storage_texture_creator(
             TEX_RD_PONG,
+            gpu_res,
+            width,
+            height,
+            TextureFormat::Rgba32Float,
+        );
+
+        registry.storage_texture_creator(
+            TEX_RD_TEMP,
             gpu_res,
             width,
             height,
@@ -161,17 +170,22 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
         self.rd_sim.set_brush_parameters(gpu_res, &brush_uniform);
 
-        // get ping or pong and clone to shorten borrow
-        let (ping_view, pong_view) = {
+        // get ping/pong/temp and clone to shorten borrow
+        let (ping_view, pong_view, temp_view) = {
             let ping = registry
                 .get_view(TEX_RD_PING)
-                .expect("rd ping view is not registered")
+                .expect("rd ping view is not registered!")
                 .clone();
             let pong = registry
                 .get_view(TEX_RD_PONG)
-                .expect("rd pong view is not registered")
+                .expect("rd pong view is not registered!")
                 .clone();
-            (ping, pong)
+            let temp_view = registry
+                .get_view(TEX_RD_TEMP)
+                .expect("rd temp view is not registered!")
+                .clone();
+
+            (ping, pong, temp_view)
         };
 
         let newest_view = {
@@ -181,6 +195,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
                 per_frame_parames.paused,
                 &ping_view,
                 &pong_view,
+                &temp_view,
             );
 
             if self.rd_sim.is_ping_source() {

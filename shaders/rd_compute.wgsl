@@ -1,70 +1,179 @@
 // defining constants for Reaction Diffusion System
-const DU : f32 = 0.19; // diffusion rate for substance U
-const DV : f32 = 0.08; // diffusion rate for substance V
-const FEED : f32 = 0.0345; // Feed rate of U
-const KILL : f32 = 0.062; // V's killing rate
+const DU : f32 = 0.18; // diffusion rate for substance U
+const DV : f32 = 0.085; // diffusion rate for substance V
+const FEED : f32 = 0.037; // Feed rate of U
+const KILL : f32 = 0.061; // V's killing rate
 
 struct TimeUniform {
     dt: f32,
 };
 
+// time uniform buffer
 @group(0) @binding(0)
 var<uniform> u_time : TimeUniform;
 
+// source for tex_n
 @group(0) @binding(1)
-var src_texture : texture_2d<f32>; // read from this
+var tex_n : texture_2d<f32>;
 
+// storage for calculating tex_star in stage 1 of RK2 and a source to read
+// for stage 2 of RK2
 @group(0) @binding(2)
-var dst_texture : texture_storage_2d<rgba32float, write>;  // write to this
+var tex_star : texture_storage_2d<rgba32float, read_write>;
 
-// sample a pixel from the input
-fn read_u_v(texture: texture_2d<f32>, x_y: vec2<i32>) -> vec2<f32> {
-    let dims = textureDimensions(texture);
-    
-    // bounds
-    let x = clamp(x_y.x, 0, i32(dims.x) - 1);
-    let y = clamp(x_y.y, 0, i32(dims.y) - 1);
-    
-    // read the pixel
-    let c = textureLoad(texture, vec2<i32>(x, y), 0);
-    return c.rg; // U V values
+// end storage for result of RK2
+@group(0) @binding(3)
+var tex_out : texture_storage_2d<rgba32float, write>;
+
+// helper function for RD systems
+fn rd_system_rhs(u: f32, v: f32, lap: vec2<f32>) -> vec2<f32> {
+    // derivatives of the coupled differential equations
+    let du = DU * lap.x - u * v * v + FEED * (1.0 - u);
+    let dv = DV * lap.y + u * v * v - (FEED + KILL) * v;
+
+    return vec2<f32>(du, dv);
 }
 
-// laplacian 4 neighbor
-fn laplacian(texture: texture_2d<f32>, x_y: vec2<i32>) -> vec2<f32> {
-    let center = read_u_v(texture, x_y);
-    let up = read_u_v(texture, x_y + vec2<i32>(0, -1));
-    let down = read_u_v(texture, x_y + vec2<i32>(0, 1));
-    let left = read_u_v(texture, x_y + vec2<i32>(-1, 0));
-    let right = read_u_v(texture, x_y + vec2<i32>(1, 0));
-
-    let laplace = (up + down + left + right) - 4.0 * center;
+// helper function for 9 point stencil
+fn nine_point_stencil(
+    center: vec2<f32>, up: vec2<f32>,
+    down: vec2<f32>, left: vec2<f32>,
+    right: vec2<f32>, up_left: vec2<f32>,
+    up_right: vec2<f32>, down_left: vec2<f32>,
+    down_right: vec2<f32>,
+) -> vec2<f32> {
+    let cross_term = 4.0 * (up + down + left + right);
+    let diag_term = up_left + up_right + down_left + down_right;
+    let laplace = (cross_term + diag_term - 20.0 * center) / 6.0;
     return laplace;
 }
 
+// sample a pixel from the input
+// helper function to read get the data from source in binding 1
+fn read_u_v(x_y: vec2<i32>) -> vec2<f32> {
+    let dims = textureDimensions(tex_n);
+    let x = clamp(x_y.x, 0, i32(dims.x) - 1);
+    let y = clamp(x_y.y, 0, i32(dims.y) - 1);
+    let c = textureLoad(tex_n, vec2<i32>(x, y), 0);
+    return c.rg;
+}
+
+// helper function to get the data from temporary storage in binding 2
+fn read_u_v_star(x_y: vec2<i32>) -> vec2<f32> {
+    let dims = textureDimensions(tex_star);
+    let x = clamp(x_y.x, 0, i32(dims.x) - 1);
+    let y = clamp(x_y.y, 0, i32(dims.y) - 1);
+    let c = textureLoad(tex_star, vec2<i32>(x, y));
+    return c.rg;
+}
+
+// laplacian calculated using 9 point stencil
+// calculates the laplacian from the source binding 1
+fn laplacian(center: vec2<f32>, x_y: vec2<i32>) -> vec2<f32> {
+    let up = read_u_v(x_y + vec2<i32>(0, -1));
+    let down = read_u_v(x_y + vec2<i32>(0, 1));
+    let left = read_u_v(x_y + vec2<i32>(-1, 0));
+    let right = read_u_v(x_y + vec2<i32>(1, 0));
+
+    let up_left = read_u_v(x_y + vec2<i32>(-1, -1));
+    let up_right = read_u_v(x_y + vec2<i32>(1, -1));
+    let down_left = read_u_v(x_y + vec2<i32>(-1, 1));
+    let down_right = read_u_v(x_y + vec2<i32>(1, 1));
+
+    let laplace = nine_point_stencil(
+        center, up, down, left, right, 
+        up_left, up_right, down_left, down_right
+    );
+    return laplace;
+}
+
+// calculates the laplacian from the storage binding 2
+fn laplacian_star(center: vec2<f32>, x_y: vec2<i32>) -> vec2<f32> {
+    let up = read_u_v_star(x_y + vec2<i32>(0, -1));
+    let down = read_u_v_star(x_y + vec2<i32>(0, 1));
+    let left = read_u_v_star(x_y + vec2<i32>(-1, 0));
+    let right = read_u_v_star(x_y + vec2<i32>(1, 0));
+
+    let up_left = read_u_v_star(x_y + vec2<i32>(-1, -1));
+    let up_right = read_u_v_star(x_y + vec2<i32>(1, -1));
+    let down_left = read_u_v_star(x_y + vec2<i32>(-1, 1));
+    let down_right = read_u_v_star(x_y + vec2<i32>(1, 1));
+
+    let laplace = nine_point_stencil(
+        center, up, down, left, right, 
+        up_left, up_right, down_left, down_right
+    );
+    return laplace;
+}
+
+
+// predictor
 @compute @workgroup_size(16, 16)
-fn main(@builtin(global_invocation_id) gid : vec3<u32>) { 
-    let dims = textureDimensions(dst_texture);
+fn main_predictor(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(tex_n); 
     let dt = u_time.dt;
 
-    // bounds
-    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    if (gid.x >= dims.x || gid.y >= dims.y) {
+        return;
+    }
 
-    // pixel values and position and the calculating the diffusion
     let x_y = vec2<i32>(i32(gid.x), i32(gid.y));
-    let u_v = read_u_v(src_texture, x_y);
-    let lap_u_v = laplacian(src_texture, x_y);
+
+    let u_v = read_u_v(x_y);
+    let lap_u_v = laplacian(u_v, x_y);
 
     var u = u_v.x;
     var v = u_v.y;
 
-    // numerical calculation of the differential equation 
-    // then calculate the integral over time
-    let du = DU * lap_u_v.x - u * v * v + FEED * (1.0 - u);
-    let dv = DV * lap_u_v.y + u * v * v - (FEED + KILL) * v;
-    u = clamp(u + du * dt, 0.0, 1.0);
-    v = clamp(v + dv * dt, 0.0, 1.0);
+    // stage one solution before integration
+    let rd_rhs = rd_system_rhs(u, v, lap_u_v); 
 
-    let u_v_res= vec4<f32>(u, v, 0.0, 1.0);
-    textureStore(dst_texture, x_y, u_v_res);
+    let du = rd_rhs.x;
+    let dv = rd_rhs.y;
+
+    let u_star = clamp(u + du * dt, 0.0, 1.0);
+    let v_star = clamp(v + dv * dt, 0.0, 1.0);
+
+    textureStore(tex_star, x_y, vec4<f32>(u_star, v_star, 0.0, 1.0));
+}
+
+
+// corrector
+@compute @workgroup_size(16, 16)
+fn main_corrector(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(tex_star);
+    let dt = u_time.dt;
+
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+
+    let x_y = vec2<i32>(i32(gid.x), i32(gid.y));
+
+    // slope at n
+    let u_v_n = read_u_v(x_y);
+    let lap_n = laplacian(u_v_n, x_y);
+
+    var u_n = u_v_n.x;
+    var v_n = u_v_n.y;
+
+    let rd_rhs_n = rd_system_rhs(u_n, v_n, lap_n);
+
+    let du1 = rd_rhs_n.x;
+    let dv1 = rd_rhs_n.y;
+
+    // slope at star
+    let u_v_star = read_u_v_star(x_y);
+    let lap_star = laplacian_star(u_v_star, x_y);
+
+    var u_star = u_v_star.x;
+    var v_star = u_v_star.y;
+
+    let rd_rhs_star = rd_system_rhs(u_star, v_star, lap_star);
+
+    let du2 = rd_rhs_star.x;
+    let dv2 = rd_rhs_star.y;
+
+    let u_next = clamp(u_n + 0.5 * dt * (du1 + du2), 0.0, 1.0);
+    let v_next = clamp(v_n + 0.5 * dt * (dv1 + dv2), 0.0, 1.0);
+
+    textureStore(tex_out, x_y, vec4<f32>(u_next, v_next, 0.0, 1.0));
 }
