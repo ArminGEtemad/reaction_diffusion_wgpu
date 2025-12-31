@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -34,7 +36,7 @@ struct InputState {
 }
 
 struct App {
-    window: Option<&'static Window>,
+    window: Option<Arc<Window>>,
     state: Option<State>,
     input: InputState,
     current_starting_pattern: StartingPattern,
@@ -70,16 +72,14 @@ impl ApplicationHandler for App {
         let attributes = Window::default_attributes()
             .with_title("Reaction-Diffusion in WGPU")
             .with_inner_size(LogicalSize::new(970.0_f64, 970.0_f64));
-        let window = event_loop
-            .create_window(attributes)
-            .expect("Failed to create window!");
-
-        // I cheated here to get the window stay open by leaking it
-        // TODO: is this the correct way to handle it?
-        let window: &'static Window = Box::leak(Box::new(window));
+        let window = Arc::new(
+            event_loop
+                .create_window(attributes)
+                .expect("Failed to create window!"),
+        );
 
         // create GPU state
-        let state = pollster::block_on(State::new(window)).expect("wgpu init failed!");
+        let state = pollster::block_on(State::new(window.clone())).expect("wgpu init failed!");
         self.window = Some(window);
         self.state = Some(state);
     }
@@ -204,7 +204,7 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let Some(w) = self.window {
+        if let Some(w) = &self.window {
             w.request_redraw();
         }
     }

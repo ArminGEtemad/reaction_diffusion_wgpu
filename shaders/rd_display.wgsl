@@ -26,19 +26,21 @@ fn vs_main(@builtin(vertex_index) vid : u32) -> VSOut {
     return out;
 }
 
+fn palette(t: f32, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
+    return a + b * cos(6.2831853 * (c * t + d)); // 2π = 6.2831853
+}
+
 fn color_pallette(u: f32, v: f32) -> vec3<f32> {
+    // map the RD field to [0,1] smoothly
+    let s = (u - v) * 1.5;
+    let t = fract(0.5 + 0.5 * s);
 
-    // TODO make a nice color pallette!
-    let a = vec3<f32>(0.1, 0.7, 0.6);
-    let b = vec3<f32>(1.0, 0.5, 0.1);
-    let c = vec3<f32>(0.8, 0.2, 0.9);
-    let d = vec3<f32>(0.1, 0.1, 0.9);
+    let a = vec3<f32>(0.2, 0.5, 0.5);
+    let b = vec3<f32>(0.3, 0.5, 0.1);
+    let c = vec3<f32>(1.0, 1.0, 1.0);
+    let d = vec3<f32>(0.3, 0.3, 0.67);
 
-    let cl = clamp(u - v, 0.0, 1.0);
-
-    // TODO maybe the color pallette changes over time
-    // but we need a uniform binding for time here
-    return d + c * cos(2.0 * (a * cl + b));
+    return palette(t, a, b, c, d);
 }
 
 @fragment

@@ -1,7 +1,8 @@
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
+    nodes::consts::*,
     rd_system::{
-        BrushUniform, ReactionDiffusionSystem, StartingPattern, SystemConfig, load_ablsolute_path,
+        ReactionDiffusionSystem, StartingPattern, SystemConfig, load_ablsolute_path,
         write_pattern_to_starting_space,
     },
     render_graph::{
@@ -11,16 +12,14 @@ use crate::{
 };
 use wgpu::*;
 
-const TEX_RD_PING: &str = "rd ping";
-const TEX_RD_PONG: &str = "rd pong";
-const TEX_RD_TEMP: &str = "rd temp"; // needed for RK2 predictor, corrector
-const TEX_RD_OUTPUT: &str = "rd output";
-
+// the simulation node is a wrapper for the system
+// because I change the system from one project to another
 pub struct ReactionDiffusionSimulationNode {
     rd_sim: ReactionDiffusionSystem,
     do_reset: Option<StartingPattern>,
 }
 
+// the render node owns the bgl and the pipelines.
 pub struct ReactionDiffusionDisplayNode {
     render_bgl: Option<BindGroupLayout>,
     render_pipeline: Option<RenderPipeline>,
@@ -139,37 +138,6 @@ impl RenderNode for ReactionDiffusionSimulationNode {
             }
         }
 
-        // brush input
-        let mut brush_uniform = BrushUniform {
-            c_x: 0.0,
-            c_y: 0.0,
-            radius: if per_frame_parames.mouse_down {
-                per_frame_parames.brush_radius
-            } else {
-                0.0
-            },
-            mode: per_frame_parames.mode,
-        };
-
-        if per_frame_parames.mouse_down {
-            if let Some((mx, my)) = per_frame_parames.mouse_pos {
-                let w = gpu_res.size.width as f32;
-                let h = gpu_res.size.height as f32;
-
-                if w > 0.0 && h > 0.0 {
-                    let nx = (mx / w).clamp(0.0, 1.0);
-                    let ny = (my / h).clamp(0.0, 1.0);
-
-                    // y axis is mirrored because of different (0, 0) point
-
-                    brush_uniform.c_x = nx * width as f32;
-                    brush_uniform.c_y = (1.0 - ny) * height as f32;
-                }
-            }
-        }
-
-        self.rd_sim.set_brush_parameters(gpu_res, &brush_uniform);
-
         // get ping/pong/temp and clone to shorten borrow
         let (ping_view, pong_view, temp_view) = {
             let ping = registry
@@ -188,21 +156,20 @@ impl RenderNode for ReactionDiffusionSimulationNode {
             (ping, pong, temp_view)
         };
 
-        let newest_view = {
-            self.rd_sim.step_simulation(
-                gpu_res,
-                frame,
-                per_frame_parames.paused,
-                &ping_view,
-                &pong_view,
-                &temp_view,
-            );
+        self.rd_sim.step_simulation(
+            gpu_res,
+            frame,
+            per_frame_parames.paused,
+            &ping_view,
+            &pong_view,
+            &temp_view,
+        );
 
-            if self.rd_sim.is_ping_source() {
-                &ping_view
-            } else {
-                &pong_view
-            }
+        // decide newest view (same as before)
+        let newest_view = if self.rd_sim.is_ping_source() {
+            &ping_view
+        } else {
+            &pong_view
         };
 
         registry.set_view(TEX_RD_OUTPUT, newest_view);
