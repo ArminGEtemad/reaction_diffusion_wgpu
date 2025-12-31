@@ -238,20 +238,6 @@ impl ReactionDiffusionSystem {
         let start_instant = Instant::now();
         let last_time: f32 = 0.0;
 
-        // initializing brush
-        let brush_uniform = BrushUniform {
-            c_x: 0.0,
-            c_y: 0.0,
-            radius: 0.0,
-            mode: 0,
-        };
-
-        let brush_buffer = device_m.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Brush Uniform Buffer"),
-            contents: bytemuck::bytes_of(&brush_uniform),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-
         // shader modules
         // a run time shader loader instead of compile time which makes the program ready for hot reload
         let compute_shader_path = load_ablsolute_path("shaders/rd_compute.wgsl");
