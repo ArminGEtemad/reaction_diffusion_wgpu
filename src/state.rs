@@ -3,8 +3,9 @@ use std::sync::Arc;
 use crate::{
     InputState,
     gpu_resources::{FrameContext, GpuResource},
-    nodes::rd_node::{
-        ReactionDiffusionBrushNode, ReactionDiffusionSimulationNode, create_rd_shared_nodes,
+    nodes::{
+        brush_node::ReactionDiffusionBrushNode,
+        rd_node::{ReactionDiffusionSimulationNode, create_rd_shared_nodes},
     },
     rd_system::StartingPattern,
     render_graph::{graph::RenderGraph, node::PerFrameParameters},
