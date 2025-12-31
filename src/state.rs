@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     InputState,
     gpu_resources::{FrameContext, GpuResource},
@@ -19,7 +21,7 @@ pub struct State {
 }
 
 impl State {
-    pub async fn new(window: &'static Window) -> Result<Self, String> {
+    pub async fn new(window: Arc<Window>) -> Result<Self, String> {
         let gpu_res = GpuResource::new(window).await?;
         let mut graph = RenderGraph::new();
         let brush = ReactionDiffusionBrushNode::new(&gpu_res);

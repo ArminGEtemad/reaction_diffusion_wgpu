@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use wgpu::*;
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -18,7 +20,7 @@ pub struct FrameContext {
 }
 
 impl GpuResource {
-    pub async fn new(window: &'static Window) -> Result<Self, String> {
+    pub async fn new(window: Arc<Window>) -> Result<Self, String> {
         let size = window.inner_size();
 
         // making the instance (calling it with _m at the end so it is not)
