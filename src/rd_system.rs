@@ -6,15 +6,15 @@ use wgpu::{
     *,
 };
 
-use crate::gpu_resources::{FrameContext, GpuResource};
+use crate::{
+    gpu_resources::{FrameContext, GpuResource},
+    nodes::consts::{WG_X, WG_Y},
+};
 
 pub struct SystemConfig {
     pub width: u32,
     pub height: u32,
 }
-
-const WG_X: u32 = 16;
-const WG_Y: u32 = 16;
 
 // For better mathematical stability
 // we can do N small simulation steps per frame
