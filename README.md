@@ -10,7 +10,7 @@ I want to work more on the code base and make it reusable for my future works (h
 
 - [x] Render Graph
   - I am not going to make a full engine. I just want to try get to a point that I can reuse my mini-engine. In the future projects, I can expand it and change it.
-- [ ] More mathematical stability and accuracy
+- [x] More mathematical stability and accuracy
   - I have the idea of making split screen where the user can look at the evolution of two system at the same time and so having a more stable algorith where the user can change the speed of the evolution without really messing up the accuracy sound nice. Which is the last point of focus here in this list
 - [ ] post-processing phases and add different views and thems
 - [ ] maybe the user can run multiple RD systems with different parameters at the same time?
