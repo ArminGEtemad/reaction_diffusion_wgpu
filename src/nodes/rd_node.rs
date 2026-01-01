@@ -1,6 +1,5 @@
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
-    nodes::consts::*,
     rd_system::{
         ReactionDiffusionSystem, StartingPattern, SystemConfig, write_pattern_to_starting_space,
     },
@@ -11,19 +10,32 @@ use crate::{
 };
 use wgpu::*;
 
+pub struct ReactionDiffustionTextureNames {
+    pub ping: &'static str,
+    pub pong: &'static str,
+    pub temp: &'static str,
+    pub output: &'static str,
+}
+
 // the simulation node is a wrapper for the system
 // because I change the system from one project to another
 pub struct ReactionDiffusionSimulationNode {
     rd_sim: ReactionDiffusionSystem,
+    texture_names: ReactionDiffustionTextureNames,
     do_reset: Option<StartingPattern>,
 }
 
 impl ReactionDiffusionSimulationNode {
-    pub fn new(gpu_res: &GpuResource, sys_config: SystemConfig) -> Self {
+    pub fn new(
+        gpu_res: &GpuResource,
+        sys_config: SystemConfig,
+        texture_names: ReactionDiffustionTextureNames,
+    ) -> Self {
         let rd_sim = ReactionDiffusionSystem::new(gpu_res, sys_config);
 
         Self {
             rd_sim,
+            texture_names,
             do_reset: Some(StartingPattern::Circle),
         }
     }
@@ -47,7 +59,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         let (width, height) = self.rd_sim.rd_size();
 
         registry.storage_texture_creator(
-            TEX_RD_PING,
+            self.texture_names.ping,
             gpu_res,
             width,
             height,
@@ -55,7 +67,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         );
 
         registry.storage_texture_creator(
-            TEX_RD_PONG,
+            self.texture_names.pong,
             gpu_res,
             width,
             height,
@@ -63,7 +75,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         );
 
         registry.storage_texture_creator(
-            TEX_RD_TEMP,
+            self.texture_names.temp,
             gpu_res,
             width,
             height,
@@ -72,8 +84,8 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
         if let Some(pattern) = self.do_reset.take() {
             if let (Some(ping), Some(pong)) = (
-                registry.get_texture(TEX_RD_PING),
-                registry.get_texture(TEX_RD_PONG),
+                registry.get_texture(self.texture_names.ping),
+                registry.get_texture(self.texture_names.pong),
             ) {
                 write_pattern_to_starting_space(
                     gpu_res,
@@ -99,8 +111,8 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
         if let Some(pattern) = self.do_reset.take() {
             if let (Some(ping), Some(pong)) = (
-                registry.get_texture(TEX_RD_PING),
-                registry.get_texture(TEX_RD_PONG),
+                registry.get_texture(self.texture_names.ping),
+                registry.get_texture(self.texture_names.pong),
             ) {
                 write_pattern_to_starting_space(
                     gpu_res,
@@ -119,15 +131,15 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         // get ping/pong/temp and clone to shorten borrow
         let (ping_view, pong_view, temp_view) = {
             let ping = registry
-                .get_view(TEX_RD_PING)
+                .get_view(self.texture_names.ping)
                 .expect("rd ping view is not registered!")
                 .clone();
             let pong = registry
-                .get_view(TEX_RD_PONG)
+                .get_view(self.texture_names.pong)
                 .expect("rd pong view is not registered!")
                 .clone();
             let temp_view = registry
-                .get_view(TEX_RD_TEMP)
+                .get_view(self.texture_names.temp)
                 .expect("rd temp view is not registered!")
                 .clone();
 
@@ -150,7 +162,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
             &pong_view
         };
 
-        registry.set_view(TEX_RD_OUTPUT, newest_view);
+        registry.set_view(self.texture_names.output, newest_view);
     }
 
     fn called_on_hotreload(&mut self, gpu_res: &GpuResource) {
