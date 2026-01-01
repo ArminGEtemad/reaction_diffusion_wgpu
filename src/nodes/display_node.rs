@@ -203,7 +203,7 @@ impl RenderNode for ReactionDiffusionDisplayNode {
         let rd2_view_opt = registry.get_view(TEX_RD2_OUTPUT);
 
         let split_screen_flag = if rd2_view_opt.is_some() { 1_u32 } else { 0_u32 };
-        let rd2_view = rd2_view_opt.unwrap();
+        let rd2_view = rd2_view_opt.unwrap_or(rd1_view);
 
         let display_parameters = DisplayParameters {
             split_screen: split_screen_flag,
