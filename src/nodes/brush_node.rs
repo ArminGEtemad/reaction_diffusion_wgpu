@@ -112,7 +112,7 @@ impl RenderNode for ReactionDiffusionBrushNode {
         let (width, height) = (1280_u32, 1280_u32);
 
         registry.storage_texture_creator(
-            TEX_RD_PING,
+            TEX_RD1_PING,
             gpu_res,
             width,
             height,
@@ -120,7 +120,7 @@ impl RenderNode for ReactionDiffusionBrushNode {
         );
 
         registry.storage_texture_creator(
-            TEX_RD_PONG,
+            TEX_RD1_PONG,
             gpu_res,
             width,
             height,
@@ -171,7 +171,7 @@ impl RenderNode for ReactionDiffusionBrushNode {
             .write_buffer(&self.brush_buffer, 0, bytes_of(&brush_uniform));
 
         let target_view = registry
-            .get_view(TEX_RD_OUTPUT)
+            .get_view(TEX_RD1_OUTPUT)
             .expect("target view for brush is missing!");
 
         let brush_bg = device.create_bind_group(&BindGroupDescriptor {
