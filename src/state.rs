@@ -4,8 +4,10 @@ use crate::{
     InputState,
     gpu_resources::{FrameContext, GpuResource},
     nodes::{
-        brush_node::ReactionDiffusionBrushNode, display_node::ReactionDiffusionDisplayNode,
-        rd_node::ReactionDiffusionSimulationNode,
+        brush_node::ReactionDiffusionBrushNode,
+        consts::*,
+        display_node::ReactionDiffusionDisplayNode,
+        rd_node::{ReactionDiffusionSimulationNode, ReactionDiffustionTextureNames},
     },
     rd_system::{StartingPattern, SystemConfig},
     render_graph::{graph::RenderGraph, node::PerFrameParameters},
@@ -29,12 +31,26 @@ impl State {
             width: 1280,
             height: 1280,
         };
+        let rd1_sys = ReactionDiffustionTextureNames {
+            ping: TEX_RD1_PING,
+            pong: TEX_RD1_PONG,
+            temp: TEX_RD1_TEMP,
+            output: TEX_RD1_OUTPUT,
+        };
+        let rd2_sys = ReactionDiffustionTextureNames {
+            ping: TEX_RD2_PING,
+            pong: TEX_RD2_PONG,
+            temp: TEX_RD2_TEMP,
+            output: TEX_RD2_OUTPUT,
+        };
         let brush = ReactionDiffusionBrushNode::new(&gpu_res);
-        let rd_sim = ReactionDiffusionSimulationNode::new(&gpu_res, sys_config);
-        let rd_display = ReactionDiffusionDisplayNode::new();
+        let rd1_sim = ReactionDiffusionSimulationNode::new(&gpu_res, sys_config.clone(), rd1_sys);
+        let rd2_sim = ReactionDiffusionSimulationNode::new(&gpu_res, sys_config, rd2_sys);
+        let rd_display = ReactionDiffusionDisplayNode::new(&gpu_res);
         //let (rd_sim, rd_display) = create_rd_shared_nodes(&gpu_res);
         graph.add_node(brush);
-        graph.add_node(rd_sim);
+        graph.add_node(rd1_sim);
+        graph.add_node(rd2_sim);
         graph.add_node(rd_display);
         graph.prepare(&gpu_res);
 
