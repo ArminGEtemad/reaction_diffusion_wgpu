@@ -1,3 +1,5 @@
+use std::num::NonZeroU64;
+
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
     nodes::consts::*,
@@ -7,21 +9,48 @@ use crate::{
         resource_registry::ResourceRegistry,
     },
 };
-use wgpu::*;
+use bytemuck::{Pod, Zeroable, bytes_of};
+use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    *,
+};
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct DisplayParameters {
+    // not boolean because I want up to 4 rd sim at the same time at some point
+    pub split_screen: u32, // 0: no, 1: yes
+    _pad: [u32; 3],
+}
 
 // the render node owns the bgl and the pipelines.
 pub struct ReactionDiffusionDisplayNode {
     render_bgl: Option<BindGroupLayout>,
     render_pipeline: Option<RenderPipeline>,
     sampler: Option<Sampler>,
+    display_buffer: Option<Buffer>,
 }
 
 impl ReactionDiffusionDisplayNode {
-    pub fn new() -> Self {
+    pub fn new(gpu_res: &GpuResource) -> Self {
+        let device = &gpu_res.device;
+
+        let display_parameters = DisplayParameters {
+            split_screen: 0,
+            _pad: [0; 3],
+        };
+
+        let display_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Display Parameter Buffer"),
+            contents: bytes_of(&display_parameters),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
         Self {
             render_bgl: None,
             render_pipeline: None,
             sampler: None,
+            display_buffer: Some(display_buffer),
         }
     }
 }
@@ -60,7 +89,7 @@ impl RenderNode for ReactionDiffusionDisplayNode {
             label: Some("Render Bind Group Layout"),
             entries: &[
                 BindGroupLayoutEntry {
-                    // rd texture
+                    // rd1 texture
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Texture {
@@ -71,10 +100,34 @@ impl RenderNode for ReactionDiffusionDisplayNode {
                     count: None,
                 },
                 BindGroupLayoutEntry {
-                    // rd sampler
+                    // rd2 texture
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float { filterable: false },
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    // rd sampler
+                    binding: 2,
+                    visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    // Uniform for display buffer
+                    binding: 3,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(
+                            std::mem::size_of::<DisplayParameters>() as u64
+                        ),
+                    },
                     count: None,
                 },
             ],
@@ -126,6 +179,7 @@ impl RenderNode for ReactionDiffusionDisplayNode {
         _per_frame_parames: &PerFrameParameters,
     ) {
         let device = &gpu_res.device;
+        let queue = &gpu_res.queue;
 
         let render_pipeline = self
             .render_pipeline
@@ -136,9 +190,27 @@ impl RenderNode for ReactionDiffusionDisplayNode {
 
         let sampler = self.sampler.as_ref().expect("RD Display sampler not ready");
 
-        let rd_view = registry
-            .get_view(TEX_RD_OUTPUT)
+        let display_buffer = self
+            .display_buffer
+            .as_ref()
+            .expect("Display Buffer not ready!");
+
+        let rd1_view = registry
+            .get_view(TEX_RD1_OUTPUT)
             .expect("RD output view is not registered!");
+
+        // split screen is optional
+        let rd2_view_opt = registry.get_view(TEX_RD2_OUTPUT);
+
+        let split_screen_flag = if rd2_view_opt.is_some() { 1_u32 } else { 0_u32 };
+        let rd2_view = rd2_view_opt.unwrap();
+
+        let display_parameters = DisplayParameters {
+            split_screen: split_screen_flag,
+            _pad: [0; 3],
+        };
+
+        queue.write_buffer(display_buffer, 0, bytes_of(&display_parameters));
 
         // TODO Do I need to make the bind group every frame? can I cache it?
         let render_bg = device.create_bind_group(&BindGroupDescriptor {
@@ -147,11 +219,19 @@ impl RenderNode for ReactionDiffusionDisplayNode {
             entries: &[
                 BindGroupEntry {
                     binding: 0,
-                    resource: BindingResource::TextureView(&rd_view),
+                    resource: BindingResource::TextureView(&rd1_view),
                 },
                 BindGroupEntry {
                     binding: 1,
+                    resource: BindingResource::TextureView(&rd2_view),
+                },
+                BindGroupEntry {
+                    binding: 2,
                     resource: BindingResource::Sampler(&sampler),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: display_buffer.as_entire_binding(),
                 },
             ],
         });
