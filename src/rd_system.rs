@@ -11,6 +11,7 @@ use crate::{
     nodes::consts::{WG_X, WG_Y},
 };
 
+#[derive(Clone, Debug)]
 pub struct SystemConfig {
     pub width: u32,
     pub height: u32,
