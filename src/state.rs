@@ -4,10 +4,10 @@ use crate::{
     InputState,
     gpu_resources::{FrameContext, GpuResource},
     nodes::{
-        brush_node::ReactionDiffusionBrushNode,
-        rd_node::{ReactionDiffusionSimulationNode, create_rd_shared_nodes},
+        brush_node::ReactionDiffusionBrushNode, display_node::ReactionDiffusionDisplayNode,
+        rd_node::ReactionDiffusionSimulationNode,
     },
-    rd_system::StartingPattern,
+    rd_system::{StartingPattern, SystemConfig},
     render_graph::{graph::RenderGraph, node::PerFrameParameters},
     shader_watcher::ShaderWatcher,
 };
@@ -25,8 +25,14 @@ impl State {
     pub async fn new(window: Arc<Window>) -> Result<Self, String> {
         let gpu_res = GpuResource::new(window).await?;
         let mut graph = RenderGraph::new();
+        let sys_config = SystemConfig {
+            width: 1280,
+            height: 1280,
+        };
         let brush = ReactionDiffusionBrushNode::new(&gpu_res);
-        let (rd_sim, rd_display) = create_rd_shared_nodes(&gpu_res);
+        let rd_sim = ReactionDiffusionSimulationNode::new(&gpu_res, sys_config);
+        let rd_display = ReactionDiffusionDisplayNode::new();
+        //let (rd_sim, rd_display) = create_rd_shared_nodes(&gpu_res);
         graph.add_node(brush);
         graph.add_node(rd_sim);
         graph.add_node(rd_display);
