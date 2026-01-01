@@ -151,6 +151,9 @@ impl RenderNode for ReactionDiffusionBrushNode {
             mode: per_frame_parameters.mode,
         };
 
+        // default one screen
+        let mut target_texture_name: &str = TEX_RD1_OUTPUT;
+
         if let Some((mx, my)) = per_frame_parameters.mouse_pos {
             let w = gpu_res.size.width as f32;
             let h = gpu_res.size.height as f32;
@@ -159,9 +162,29 @@ impl RenderNode for ReactionDiffusionBrushNode {
                 let nx = (mx / w).clamp(0.0, 1.0);
                 let ny = (my / h).clamp(0.0, 1.0);
 
-                // y axis is mirrored because of different (0, 0) point
+                // is rd2 available
+                let rd2_view_opt = registry.get_view(TEX_RD2_OUTPUT).is_some();
 
-                brush_uniform.c_x = nx * width as f32;
+                if rd2_view_opt && nx >= 0.5 {
+                    // right half
+                    target_texture_name = TEX_RD2_OUTPUT;
+                    let mapped_nx = (nx - 0.5) * 2.0;
+                    brush_uniform.c_x = mapped_nx * width as f32;
+                } else {
+                    // left half
+                    target_texture_name = TEX_RD1_OUTPUT;
+
+                    let mapped_nx = if rd2_view_opt {
+                        // rd1 is half left
+                        nx * 2.0
+                    } else {
+                        // no split screen
+                        nx
+                    };
+                    brush_uniform.c_x = mapped_nx * width as f32;
+                }
+
+                // y axis is mirrored because of different (0, 0) point
                 brush_uniform.c_y = (1.0 - ny) * height as f32;
             }
         }
@@ -171,7 +194,7 @@ impl RenderNode for ReactionDiffusionBrushNode {
             .write_buffer(&self.brush_buffer, 0, bytes_of(&brush_uniform));
 
         let target_view = registry
-            .get_view(TEX_RD1_OUTPUT)
+            .get_view(target_texture_name)
             .expect("target view for brush is missing!");
 
         let brush_bg = device.create_bind_group(&BindGroupDescriptor {
