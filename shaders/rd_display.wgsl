@@ -1,8 +1,18 @@
+struct DisplayParameters {
+    split_screen: u32,
+}
+
 @group(0) @binding(0)
-var rd_texture : texture_2d<f32>;
+var rd1_texture : texture_2d<f32>;
 
 @group(0) @binding(1)
+var rd2_texture : texture_2d<f32>;
+
+@group(0) @binding(2)
 var rd_sampler : sampler;
+
+@group(0) @binding(3)
+var<uniform> u_display : DisplayParameters;
 
 struct VSOut {
     @builtin(position) pos : vec4<f32>,
@@ -45,11 +55,38 @@ fn color_pallette(u: f32, v: f32) -> vec3<f32> {
 
 @fragment
 fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
-    let u_v = textureSampleLevel(rd_texture, rd_sampler, in.uv, 0.0).rg; // only two channels 
+    let uv = in.uv;
+
+    // single-view mode: show rd1 full screen
+    if (u_display.split_screen == 0u) {
+        let u_v = textureSampleLevel(rd1_texture, rd_sampler, uv, 0.0).rg;
+        let u = u_v.x;
+        let v = u_v.y;
+        let color_theme = color_pallette(u, v);
+
+        return vec4<f32>(color_theme, 1.0);
+    }
+
+    // else 
+
+    // split-screen mode
+    var sample_uv : vec2<f32>;
+    var u_v : vec2<f32>;
+
+    if (uv.x < 0.5) {
+        // left half: rd1, remap x from [0, 0.5] -> [0, 1]
+        let uv_left = vec2<f32>(uv.x * 2.0, uv.y);
+        u_v = textureSampleLevel(rd1_texture, rd_sampler, uv_left, 0.0).rg;
+    } else {
+        // right half: rd2, remap x from [0.5, 1.0] -> [0, 1]
+        let uv_right = vec2<f32>((uv.x - 0.5) * 2.0, uv.y);
+        u_v = textureSampleLevel(rd2_texture, rd_sampler, uv_right, 0.0).rg;
+    }
+
     let u = u_v.x;
     let v = u_v.y;
-
     let color_theme = color_pallette(u, v);
+
     return vec4<f32>(color_theme, 1.0);
 }
 
