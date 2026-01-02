@@ -69,9 +69,11 @@ impl Default for InputState {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let base_wh = 970.0_f64;
+
         let attributes = Window::default_attributes()
             .with_title("Reaction-Diffusion in WGPU")
-            .with_inner_size(LogicalSize::new(970.0_f64, 970.0_f64));
+            .with_inner_size(LogicalSize::new(base_wh, base_wh));
         let window = Arc::new(
             event_loop
                 .create_window(attributes)
@@ -80,6 +82,16 @@ impl ApplicationHandler for App {
 
         // create GPU state
         let state = pollster::block_on(State::new(window.clone())).expect("wgpu init failed!");
+
+        // get the number of simulations
+        let n = state.number_of_sims as f64;
+        let new_size = LogicalSize::new(base_wh * n, base_wh);
+        if let Some(physical_size) = window.as_ref().request_inner_size(new_size) {
+            println!("Requested resize applied: {:?}", physical_size);
+        } else {
+            println!("Resize request deferred or ignored by platform");
+        }
+
         self.window = Some(window);
         self.state = Some(state);
     }
@@ -120,7 +132,6 @@ impl ApplicationHandler for App {
                 println!("Mouse Position: {:?}", self.input.mouse_pos);
             }
 
-            // TODO test it on the laptop later
             WindowEvent::MouseWheel { delta, .. } => {
                 let scroll_d = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y * 1.0,
