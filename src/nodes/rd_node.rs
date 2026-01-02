@@ -170,6 +170,12 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         self.rd_sim.rebuild_pipeline(gpu_res);
     }
 
+    fn get_number_of_simulations(&self) -> u32 {
+        // every simulation is 1 simulation of course
+        // in brush for example will be still 0 simulation
+        1
+    }
+
     fn as_any(&mut self) -> &mut dyn std::any::Any {
         self
     }
