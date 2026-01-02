@@ -41,6 +41,11 @@ pub trait RenderNode {
     // called when shaders are reloded
     fn called_on_hotreload(&mut self, _gpu_res: &GpuResource) {}
 
+    // helper function to get the number of screens
+    fn get_number_of_simulations(&self) -> u32 {
+        0 // no simulation by default
+    }
+
     // need it for the graph to be able to get access to any node I want in other scripts
     fn as_any(&mut self) -> &mut dyn Any;
 }
