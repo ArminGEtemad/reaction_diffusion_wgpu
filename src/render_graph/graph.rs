@@ -73,4 +73,12 @@ impl RenderGraph {
         }
         None
     }
+
+    // count the number of simulation
+    pub fn simulaton_count(&self) -> u32 {
+        self.nodes
+            .iter()
+            .map(|sim| sim.node.get_number_of_simulations())
+            .sum()
+    }
 }
