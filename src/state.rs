@@ -21,6 +21,7 @@ pub struct State {
     //rd_system: ReactionDiffusionSystem,
     graph: RenderGraph,
     shader_watcher: ShaderWatcher,
+    pub number_of_sims: u32,
 }
 
 impl State {
@@ -47,11 +48,16 @@ impl State {
         let rd1_sim = ReactionDiffusionSimulationNode::new(&gpu_res, sys_config.clone(), rd1_sys);
         let rd2_sim = ReactionDiffusionSimulationNode::new(&gpu_res, sys_config, rd2_sys);
         let rd_display = ReactionDiffusionDisplayNode::new(&gpu_res);
-        //let (rd_sim, rd_display) = create_rd_shared_nodes(&gpu_res);
+
+        // add nodes
         graph.add_node(brush);
         graph.add_node(rd1_sim);
         graph.add_node(rd2_sim);
         graph.add_node(rd_display);
+        // get the number of simulations
+        let number_of_sims = graph.simulaton_count();
+
+        // prepare
         graph.prepare(&gpu_res);
 
         let shaders_path = format!("{}/shaders", env!("CARGO_MANIFEST_DIR")); // absolute address 
@@ -62,6 +68,7 @@ impl State {
             gpu_res,
             graph,
             shader_watcher,
+            number_of_sims,
         })
     }
 
