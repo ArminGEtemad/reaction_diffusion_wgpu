@@ -68,6 +68,11 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
     }
 
     // else 
+    // add boundary between the screens
+    let boundary_width = 0.001;
+    if (abs(uv.x - 0.5) < boundary_width) {
+        return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    }
 
     // split-screen mode
     var sample_uv : vec2<f32>;
