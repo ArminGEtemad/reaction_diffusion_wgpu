@@ -16,6 +16,13 @@ use crate::{
 use wgpu::SurfaceError;
 use winit::{dpi::PhysicalSize, window::Window};
 
+#[derive(Clone, Copy, Debug)]
+pub enum Side {
+    AllSides,
+    Left,
+    Right,
+}
+
 pub struct State {
     gpu_res: GpuResource,
     //rd_system: ReactionDiffusionSystem,
@@ -101,11 +108,40 @@ impl State {
         Ok(())
     }
 
-    pub fn reset(&mut self, pattern: StartingPattern) {
-        if let Some(sim_node) = self.graph.get_node_mut::<ReactionDiffusionSimulationNode>() {
-            sim_node.reset(pattern);
-        } else {
-            eprint!("ReactionDiffusionNode not found!");
+    pub fn reset(
+        &mut self,
+        left_pattern: StartingPattern,
+        right_pattern: StartingPattern,
+        side: Side,
+    ) {
+        let mut found_any = false;
+
+        self.graph
+            .for_each_node_mut::<ReactionDiffusionSimulationNode, _>(|sim_node| {
+                let out = sim_node.out_put_texture_name();
+
+                let (matches, pattern) = match side {
+                    Side::AllSides => {
+                        if out == TEX_RD1_OUTPUT {
+                            (true, left_pattern)
+                        } else if out == TEX_RD2_OUTPUT {
+                            (true, right_pattern)
+                        } else {
+                            (false, left_pattern) // unknown output, ignore
+                        }
+                    }
+                    Side::Left => (out == TEX_RD1_OUTPUT, left_pattern),
+                    Side::Right => (out == TEX_RD2_OUTPUT, right_pattern),
+                };
+
+                if matches {
+                    sim_node.reset(pattern);
+                    found_any = true;
+                }
+            });
+
+        if !found_any {
+            eprint!("ReactionDiffusionSimulationNode not found!");
         }
     }
 }
