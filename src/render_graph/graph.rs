@@ -65,13 +65,22 @@ impl RenderGraph {
     }
 
     // getting a mutabe refrence to a node in other scripts
-    pub fn get_node_mut<N: 'static>(&mut self) -> Option<&mut N> {
+    pub fn _get_node_mut<N: 'static>(&mut self) -> Option<&mut N> {
         for entry in self.nodes.iter_mut() {
             if let Some(node) = entry.node.as_any().downcast_mut::<N>() {
                 return Some(node);
             }
         }
         None
+    }
+
+    // apply a function to every node.
+    pub fn for_each_node_mut<N: 'static, F: FnMut(&mut N)>(&mut self, mut f: F) {
+        for entry in self.nodes.iter_mut() {
+            if let Some(node) = entry.node.as_any().downcast_mut::<N>() {
+                f(node);
+            }
+        }
     }
 
     // count the number of simulation
