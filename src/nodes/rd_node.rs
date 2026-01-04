@@ -43,6 +43,11 @@ impl ReactionDiffusionSimulationNode {
     pub fn reset(&mut self, pattern: StartingPattern) {
         self.do_reset = Some(pattern)
     }
+
+    // helper function to know what texture belogs to which node
+    pub fn out_put_texture_name(&self) -> &'static str {
+        self.texture_names.output
+    }
 }
 
 // Compute Only (+ mouse injection)
