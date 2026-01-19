@@ -1,4 +1,4 @@
-use bytemuck::{Pod, Zeroable};
+use bytemuck::{Pod, Zeroable, bytes_of};
 use std::{fs, num::NonZeroU64, path::PathBuf, time::Instant};
 
 use wgpu::{
@@ -173,6 +173,16 @@ struct TimeUniform {
     _pad: [f32; 3], // 12 byte
 }
 
+// rd system parameters
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct SystemParamsUniform {
+    pub du_rate: f32,
+    pub dv_rate: f32,
+    pub feed: f32,
+    pub kill: f32,
+}
+
 // Brush
 // this lives in group 0 binding 0 (brush shader)
 #[repr(C)]
@@ -199,6 +209,10 @@ pub struct ReactionDiffusionSystem {
 
     // parameters
     pub sim_parameters: SimulationParameters,
+
+    // rd system parameters
+    pub rd_sys_parameters: SystemParamsUniform,
+    pub rd_sys_uniform: Buffer,
 
     // uniform
     pub time_buffer: Buffer,
@@ -238,6 +252,19 @@ impl ReactionDiffusionSystem {
 
         let start_instant = Instant::now();
         let last_time: f32 = 0.0;
+
+        let rd_sys_parameters = SystemParamsUniform {
+            du_rate: 0.18,
+            dv_rate: 0.085,
+            feed: 0.037,
+            kill: 0.061,
+        };
+
+        let rd_sys_uniform = device_m.create_buffer_init(&BufferInitDescriptor {
+            label: Some("RD Params uniform Buffer"),
+            contents: bytes_of(&rd_sys_parameters),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
 
         // shader modules
         // a run time shader loader instead of compile time which makes the program ready for hot reload
@@ -300,6 +327,19 @@ impl ReactionDiffusionSystem {
                         },
                         count: None,
                     },
+                    BindGroupLayoutEntry {
+                        // rd system parameters
+                        binding: 4,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: NonZeroU64::new(
+                                std::mem::size_of::<SystemParamsUniform>() as u64,
+                            ),
+                        },
+                        count: None,
+                    },
                 ],
             });
 
@@ -342,6 +382,9 @@ impl ReactionDiffusionSystem {
 
             sim_parameters,
 
+            rd_sys_parameters,
+            rd_sys_uniform,
+
             time_buffer,
             _start_instant: start_instant,
             _last_time: last_time,
@@ -355,6 +398,18 @@ impl ReactionDiffusionSystem {
 
         // return
         self_package
+    }
+
+    pub fn set_rd_sys_parameters(
+        &mut self,
+        gpu_res: &GpuResource,
+        new_params: SystemParamsUniform,
+    ) {
+        self.rd_sys_parameters = new_params;
+
+        gpu_res
+            .queue
+            .write_buffer(&self.rd_sys_uniform, 0, bytes_of(&self.rd_sys_parameters));
     }
 
     fn update_time_uniform(&self, gpu_res: &GpuResource) {
@@ -412,6 +467,10 @@ impl ReactionDiffusionSystem {
                         binding: 3, // not used by the predictor only corrector
                         resource: BindingResource::TextureView(&compute_destination),
                     },
+                    BindGroupEntry {
+                        binding: 4,
+                        resource: self.rd_sys_uniform.as_entire_binding(),
+                    },
                 ],
             });
 
@@ -447,6 +506,10 @@ impl ReactionDiffusionSystem {
                     BindGroupEntry {
                         binding: 3,
                         resource: BindingResource::TextureView(&compute_destination),
+                    },
+                    BindGroupEntry {
+                        binding: 4,
+                        resource: self.rd_sys_uniform.as_entire_binding(),
                     },
                 ],
             });
