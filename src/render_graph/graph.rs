@@ -65,7 +65,7 @@ impl RenderGraph {
     }
 
     // getting a mutabe refrence to a node in other scripts
-    pub fn _get_node_mut<N: 'static>(&mut self) -> Option<&mut N> {
+    pub fn get_node_mut<N: 'static>(&mut self) -> Option<&mut N> {
         for entry in self.nodes.iter_mut() {
             if let Some(node) = entry.node.as_any().downcast_mut::<N>() {
                 return Some(node);
