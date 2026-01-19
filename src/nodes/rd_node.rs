@@ -11,15 +11,16 @@ use crate::{
 use wgpu::*;
 
 pub struct ReactionDiffustionTextureNames {
-    pub ping: &'static str,
-    pub pong: &'static str,
-    pub temp: &'static str,
-    pub output: &'static str,
+    pub ping: String,
+    pub pong: String,
+    pub temp: String,
+    pub output: String,
 }
 
 // the simulation node is a wrapper for the system
 // because I change the system from one project to another
 pub struct ReactionDiffusionSimulationNode {
+    slot_idx: u32,
     rd_sim: ReactionDiffusionSystem,
     texture_names: ReactionDiffustionTextureNames,
     do_reset: Option<StartingPattern>,
@@ -30,13 +31,15 @@ impl ReactionDiffusionSimulationNode {
         gpu_res: &GpuResource,
         sys_config: SystemConfig,
         texture_names: ReactionDiffustionTextureNames,
+        slot_idx: u32,
     ) -> Self {
         let rd_sim = ReactionDiffusionSystem::new(gpu_res, sys_config);
 
         Self {
+            slot_idx,
             rd_sim,
             texture_names,
-            do_reset: Some(StartingPattern::Circle),
+            do_reset: Some(StartingPattern::CleanSheet), // Staring with clean sheet makes more sense
         }
     }
 
@@ -44,9 +47,8 @@ impl ReactionDiffusionSimulationNode {
         self.do_reset = Some(pattern)
     }
 
-    // helper function to know what texture belogs to which node
-    pub fn out_put_texture_name(&self) -> &'static str {
-        self.texture_names.output
+    pub fn slot_idx(&self) -> u32 {
+        self.slot_idx
     }
 }
 
@@ -64,7 +66,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         let (width, height) = self.rd_sim.rd_size();
 
         registry.storage_texture_creator(
-            self.texture_names.ping,
+            self.texture_names.ping.as_str(),
             gpu_res,
             width,
             height,
@@ -72,7 +74,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         );
 
         registry.storage_texture_creator(
-            self.texture_names.pong,
+            self.texture_names.pong.as_str(),
             gpu_res,
             width,
             height,
@@ -80,7 +82,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         );
 
         registry.storage_texture_creator(
-            self.texture_names.temp,
+            self.texture_names.temp.as_str(),
             gpu_res,
             width,
             height,
@@ -89,8 +91,8 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
         if let Some(pattern) = self.do_reset.take() {
             if let (Some(ping), Some(pong)) = (
-                registry.get_texture(self.texture_names.ping),
-                registry.get_texture(self.texture_names.pong),
+                registry.get_texture(self.texture_names.ping.as_str()),
+                registry.get_texture(self.texture_names.pong.as_str()),
             ) {
                 write_pattern_to_starting_space(
                     gpu_res,
@@ -116,8 +118,8 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
         if let Some(pattern) = self.do_reset.take() {
             if let (Some(ping), Some(pong)) = (
-                registry.get_texture(self.texture_names.ping),
-                registry.get_texture(self.texture_names.pong),
+                registry.get_texture(self.texture_names.ping.as_str()),
+                registry.get_texture(self.texture_names.pong.as_str()),
             ) {
                 write_pattern_to_starting_space(
                     gpu_res,
@@ -136,15 +138,15 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         // get ping/pong/temp and clone to shorten borrow
         let (ping_view, pong_view, temp_view) = {
             let ping = registry
-                .get_view(self.texture_names.ping)
+                .get_view(self.texture_names.ping.as_str())
                 .expect("rd ping view is not registered!")
                 .clone();
             let pong = registry
-                .get_view(self.texture_names.pong)
+                .get_view(self.texture_names.pong.as_str())
                 .expect("rd pong view is not registered!")
                 .clone();
             let temp_view = registry
-                .get_view(self.texture_names.temp)
+                .get_view(self.texture_names.temp.as_str())
                 .expect("rd temp view is not registered!")
                 .clone();
 
@@ -167,7 +169,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
             &pong_view
         };
 
-        registry.set_view(self.texture_names.output, newest_view);
+        registry.set_view(self.texture_names.output.as_str(), newest_view);
     }
 
     fn called_on_hotreload(&mut self, gpu_res: &GpuResource) {
