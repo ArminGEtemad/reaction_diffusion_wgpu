@@ -2,7 +2,6 @@ use std::num::NonZeroU64;
 
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
-    nodes::consts::*,
     rd_system::load_ablsolute_path,
     render_graph::{
         node::{PassType, PerFrameParameters, RenderNode},
@@ -29,6 +28,9 @@ pub struct ReactionDiffusionDisplayNode {
     render_pipeline: Option<RenderPipeline>,
     sampler: Option<Sampler>,
     display_buffer: Option<Buffer>,
+
+    output_1: Option<String>, // lefgt
+    output_2: Option<String>, // right
 }
 
 impl ReactionDiffusionDisplayNode {
@@ -51,7 +53,15 @@ impl ReactionDiffusionDisplayNode {
             render_pipeline: None,
             sampler: None,
             display_buffer: Some(display_buffer),
+
+            output_1: None,
+            output_2: None,
         }
+    }
+
+    pub fn set_targets(&mut self, output_1: String, output_2: Option<String>) {
+        self.output_1 = Some(output_1);
+        self.output_2 = output_2;
     }
 }
 
@@ -195,12 +205,22 @@ impl RenderNode for ReactionDiffusionDisplayNode {
             .as_ref()
             .expect("Display Buffer not ready!");
 
+        let output_1_name = match &self.output_1 {
+            Some(name) => name.as_str(),
+            None => {
+                eprintln!("Mandatory display target not found!");
+                return;
+            }
+        };
+
         let rd1_view = registry
-            .get_view(TEX_RD1_OUTPUT)
-            .expect("RD output view is not registered!");
+            .get_view(output_1_name)
+            .expect("Mandatory display view not found!");
 
         // split screen is optional
-        let rd2_view_opt = registry.get_view(TEX_RD2_OUTPUT);
+        let output_2_name_opt = self.output_2.as_deref();
+
+        let rd2_view_opt = output_2_name_opt.and_then(|name| registry.get_view(name));
 
         let split_screen_flag = if rd2_view_opt.is_some() { 1_u32 } else { 0_u32 };
         let rd2_view = rd2_view_opt.unwrap_or(rd1_view);
