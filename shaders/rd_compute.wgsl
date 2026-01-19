@@ -1,12 +1,13 @@
-// defining constants for Reaction Diffusion System
-const DU : f32 = 0.18; // diffusion rate for substance U
-const DV : f32 = 0.085; // diffusion rate for substance V
-const FEED : f32 = 0.037; // Feed rate of U
-const KILL : f32 = 0.061; // V's killing rate
-
 struct TimeUniform {
     dt: f32,
 };
+
+struct RDSystemParameters {
+    du_rate: f32,
+    dv_rate: f32,
+    feed: f32,
+    kill: f32,
+}
 
 // time uniform buffer
 @group(0) @binding(0)
@@ -25,11 +26,15 @@ var tex_star : texture_storage_2d<rgba32float, read_write>;
 @group(0) @binding(3)
 var tex_out : texture_storage_2d<rgba32float, write>;
 
+// uploading system parameters
+@group(0) @binding(4)
+var<uniform> sys_params : RDSystemParameters;
+
 // helper function for RD systems
 fn rd_system_rhs(u: f32, v: f32, lap: vec2<f32>) -> vec2<f32> {
     // derivatives of the coupled differential equations
-    let du = DU * lap.x - u * v * v + FEED * (1.0 - u);
-    let dv = DV * lap.y + u * v * v - (FEED + KILL) * v;
+    let du = sys_params.du_rate * lap.x - u * v * v + sys_params.feed * (1.0 - u);
+    let dv = sys_params.dv_rate * lap.y + u * v * v - (sys_params.feed + sys_params.kill) * v;
 
     return vec2<f32>(du, dv);
 }
