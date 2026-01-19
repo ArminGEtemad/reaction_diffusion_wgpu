@@ -8,7 +8,7 @@ use crate::{
         display_node::ReactionDiffusionDisplayNode,
         rd_node::{ReactionDiffusionSimulationNode, ReactionDiffustionTextureNames},
     },
-    rd_system::{StartingPattern, SystemConfig},
+    rd_system::{StartingPattern, SystemConfig, SystemParamsUniform},
     render_graph::{graph::RenderGraph, node::PerFrameParameters},
     shader_watcher::ShaderWatcher,
 };
@@ -58,6 +58,7 @@ impl State {
             height: 1280,
         };
 
+        // the enabled can be changed to false if we want only one screen
         let slots = vec![
             SimSlotConfig {
                 slot_idx: 0,
@@ -102,6 +103,32 @@ impl State {
 
         // prepare
         graph.prepare(&gpu_res);
+
+        graph.for_each_node_mut::<ReactionDiffusionSimulationNode, _>(|sim_node| {
+            match sim_node.slot_idx() {
+                0 => {
+                    // left side
+                    let params: SystemParamsUniform = SystemParamsUniform {
+                        du_rate: 0.16,
+                        dv_rate: 0.08,
+                        feed: 0.04,
+                        kill: 0.06,
+                    };
+                    sim_node.set_params(&gpu_res, params);
+                }
+                1 => {
+                    // right side
+                    let params = SystemParamsUniform {
+                        du_rate: 0.16,
+                        dv_rate: 0.08,
+                        feed: 0.025,
+                        kill: 0.055,
+                    };
+                    sim_node.set_params(&gpu_res, params);
+                }
+                _ => {}
+            }
+        });
 
         // lookup the struct added to the graph
         // mutate the fields on it using the precomputed texture names
