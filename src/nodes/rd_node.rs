@@ -1,7 +1,8 @@
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
     rd_system::{
-        ReactionDiffusionSystem, StartingPattern, SystemConfig, write_pattern_to_starting_space,
+        ReactionDiffusionSystem, StartingPattern, SystemConfig, SystemParamsUniform,
+        write_pattern_to_starting_space,
     },
     render_graph::{
         node::{PassType, PerFrameParameters, RenderNode},
@@ -49,6 +50,10 @@ impl ReactionDiffusionSimulationNode {
 
     pub fn slot_idx(&self) -> u32 {
         self.slot_idx
+    }
+
+    pub fn set_params(&mut self, gpu_res: &GpuResource, params: SystemParamsUniform) {
+        self.rd_sim.set_rd_sys_parameters(gpu_res, params);
     }
 }
 
