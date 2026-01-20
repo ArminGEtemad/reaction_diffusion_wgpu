@@ -12,8 +12,9 @@ I want to work more on the code base and make it reusable for my future works (h
   - I am not going to make a full engine. I just want to try get to a point that I can reuse my mini-engine. In the future projects, I can expand it and change it.
 - [x] More mathematical stability and accuracy
   - I have the idea of making split screen where the user can look at the evolution of two system at the same time and so having a more stable algorith where the user can change the speed of the evolution without really messing up the accuracy sound nice. Which is the last point of focus here in this list
+- [x] the user can run multiple RD systems with different parameters at the same time as split screen
 - [ ] post-processing phases and add different views and thems
-- [ ] maybe the user can run multiple RD systems with different parameters at the same time?
+- [ ] Add UI
 
 There are many stuff I want to add to have a fully interactive reaction diffusion system that feels fun to use and watch as patterns evolve.
 
@@ -21,7 +22,7 @@ There are many stuff I want to add to have a fully interactive reaction diffusio
 
 After the fist focus is done, I want to focus on what i planned.
 
-- [x] Hot reload
+- [x] Hot reload (color map)
 - [x] Interactivity (Brush, Eraser, Pause, Play)
 - [x] Add different starting blob shapes / reset
 
@@ -41,52 +42,42 @@ When these are done, the focus is going to be interactivity, hotreload and maybe
 
 ## Screenshots and Gifs
 
-Right now the project can be cloned and started with reaction diffusion parameters that are hard coded and lead to the following pattern:
+Two reaction diffusion system with different parameters run at the same time. The user can interact using the mouse. The mouse works like a brush and can add elements and also erase.
 
 <div style="display: flex; gap: 20px; align-items: flex-start;">
 
   <div>
-    <img src="docs/Patterns/first_pattern.png" width="300"/>
-  </div>
-
-  <div>
-    <img src="docs/Patterns/Pattern_1.gif" width="300"/>
+    <img src="docs/SplitScreenUpdates/splitscreen.gif" width="600"/>
   </div>
 
 </div>
-With parameters: DU = 0.19, DV = 0.08, FEED = 0.0345, KILL = 0.062
 
-with a bit of change:
+In the split screen mode the user has control over sides independently. Using arrow keys, the user can restart and change the starting shape of the blob for each side.
 
 <div style="display: flex; gap: 20px; align-items: flex-start;">
 
   <div>
-    <img src="docs/Patterns/second_pattern.png" width="300"/>
-  </div>
-
-  <div>
-    <img src="docs/Patterns/Pattern_2.gif" width="300"/>
+    <img src="docs/SplitScreenUpdates/side_choice.gif" width="600"/>
   </div>
 
 </div>
-With parameters: DU = 0.16, DV = 0.08, FEED = 0.0645, KILL = 0.062
 
 ## Interactivity
 
-There are three modes for the brush that the user can toggle in between using the keyboard keys `0`, `1` and `2`.
-The size of the brush can be changed using the mouse wheel. The the key `p` can be used to pause and play the the simulation.
-
-| Key         | What it does                             |
-| ----------- | ---------------------------------------- |
-| 1           | Add element V                            |
-| 2           | Add element U                            |
-| 0           | Erase                                    |
-| p           | Pause/Play                               |
-| r           | Reset the simulation                     |
-| a           | Change the starting blob shape to Circle |
-| b           | Change the starting blob shape to Square |
-| c           | No starting blob                         |
-| mouse wheel | Resize the brush                         |
+| Key         | What it does                              |
+| ----------- | ----------------------------------------- |
+| 1           | Add element V                             |
+| 2           | Add element U                             |
+| 0           | Erase                                     |
+| p           | Pause/Play                                |
+| r           | Reset the simulation                      |
+| a           | Change the starting blob shape to Circle  |
+| b           | Change the starting blob shape to Square  |
+| c           | No starting blob                          |
+| mouse wheel | Resize the brush                          |
+| left arrow  | Select left side of split screen to edit  |
+| right arrow | Select right side of split screen to edit |
+| up arrow    | Select both side of split screen to edit  |
 
 ## Math and Design
 
