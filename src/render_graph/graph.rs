@@ -73,4 +73,21 @@ impl RenderGraph {
         }
         None
     }
+
+    // apply a function to every node.
+    pub fn for_each_node_mut<N: 'static, F: FnMut(&mut N)>(&mut self, mut f: F) {
+        for entry in self.nodes.iter_mut() {
+            if let Some(node) = entry.node.as_any().downcast_mut::<N>() {
+                f(node);
+            }
+        }
+    }
+
+    // count the number of simulation
+    pub fn simulaton_count(&self) -> u32 {
+        self.nodes
+            .iter()
+            .map(|sim| sim.node.get_number_of_simulations())
+            .sum()
+    }
 }

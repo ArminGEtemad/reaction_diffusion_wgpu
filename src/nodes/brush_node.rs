@@ -20,6 +20,9 @@ pub struct ReactionDiffusionBrushNode {
     brush_buffer: Buffer,
     brush_bgl: BindGroupLayout,
     brush_pipeline: ComputePipeline,
+
+    output_1: Option<String>, // lefgt
+    output_2: Option<String>, // right
 }
 
 impl ReactionDiffusionBrushNode {
@@ -94,7 +97,14 @@ impl ReactionDiffusionBrushNode {
             brush_buffer,
             brush_bgl,
             brush_pipeline,
+            output_1: None,
+            output_2: None,
         }
+    }
+
+    pub fn set_targets(&mut self, output_1: String, output_2: Option<String>) {
+        self.output_1 = Some(output_1);
+        self.output_2 = output_2;
     }
 }
 
@@ -107,26 +117,7 @@ impl RenderNode for ReactionDiffusionBrushNode {
         PassType::Compute
     }
 
-    fn prepare(&mut self, registry: &mut ResourceRegistry, gpu_res: &GpuResource) {
-        // TODO hard coded now. should be read from the system config
-        let (width, height) = (1280_u32, 1280_u32);
-
-        registry.storage_texture_creator(
-            TEX_RD_PING,
-            gpu_res,
-            width,
-            height,
-            TextureFormat::Rgba32Float,
-        );
-
-        registry.storage_texture_creator(
-            TEX_RD_PONG,
-            gpu_res,
-            width,
-            height,
-            TextureFormat::Rgba32Float,
-        );
-    }
+    fn prepare(&mut self, _registry: &mut ResourceRegistry, _gpu_res: &GpuResource) {}
 
     fn execute(
         &mut self,
@@ -141,6 +132,17 @@ impl RenderNode for ReactionDiffusionBrushNode {
 
         let device = &gpu_res.device;
 
+        // get names
+        let output_1_name = match &self.output_1 {
+            Some(name) => name.as_str(),
+            None => {
+                eprintln!("Mandatory brush target not found!");
+                return;
+            }
+        };
+
+        let output_2_name_opt = self.output_2.as_deref();
+
         // TODO hardcoded now and should be read from the system config
         let (width, height) = (1280_u32, 1280_u32);
 
@@ -151,6 +153,9 @@ impl RenderNode for ReactionDiffusionBrushNode {
             mode: per_frame_parameters.mode,
         };
 
+        // default one screen
+        let mut target_texture_name: &str = output_1_name;
+
         if let Some((mx, my)) = per_frame_parameters.mouse_pos {
             let w = gpu_res.size.width as f32;
             let h = gpu_res.size.height as f32;
@@ -159,9 +164,29 @@ impl RenderNode for ReactionDiffusionBrushNode {
                 let nx = (mx / w).clamp(0.0, 1.0);
                 let ny = (my / h).clamp(0.0, 1.0);
 
-                // y axis is mirrored because of different (0, 0) point
+                // is rd2 available
+                let rd2_view_opt = output_2_name_opt.and_then(|name| registry.get_view(name));
 
-                brush_uniform.c_x = nx * width as f32;
+                if rd2_view_opt.is_some() && nx >= 0.5 {
+                    // right half
+                    target_texture_name = output_2_name_opt.unwrap();
+                    let mapped_nx = (nx - 0.5) * 2.0;
+                    brush_uniform.c_x = mapped_nx * width as f32;
+                } else {
+                    // left half
+                    target_texture_name = output_1_name;
+
+                    let mapped_nx = if rd2_view_opt.is_some() {
+                        // rd1 is half left
+                        nx * 2.0
+                    } else {
+                        // no split screen
+                        nx
+                    };
+                    brush_uniform.c_x = mapped_nx * width as f32;
+                }
+
+                // y axis is mirrored because of different (0, 0) point
                 brush_uniform.c_y = (1.0 - ny) * height as f32;
             }
         }
@@ -171,7 +196,7 @@ impl RenderNode for ReactionDiffusionBrushNode {
             .write_buffer(&self.brush_buffer, 0, bytes_of(&brush_uniform));
 
         let target_view = registry
-            .get_view(TEX_RD_OUTPUT)
+            .get_view(target_texture_name)
             .expect("target view for brush is missing!");
 
         let brush_bg = device.create_bind_group(&BindGroupDescriptor {
