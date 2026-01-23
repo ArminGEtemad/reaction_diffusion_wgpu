@@ -6,6 +6,7 @@ use crate::{
     nodes::{
         brush_node::ReactionDiffusionBrushNode,
         display_node::ReactionDiffusionDisplayNode,
+        post_processing_1_node::PostProcessingNode,
         rd_node::{ReactionDiffusionSimulationNode, ReactionDiffustionTextureNames},
     },
     rd_system::{StartingPattern, SystemConfig, SystemParamsUniform},
@@ -74,6 +75,8 @@ impl State {
 
         // add brush and display node.
         let brush = ReactionDiffusionBrushNode::new(&gpu_res);
+        let postprocess = PostProcessingNode::new(&gpu_res);
+
         let rd_display = ReactionDiffusionDisplayNode::new(&gpu_res);
         graph.add_node(brush);
         graph.add_node(rd_display);
@@ -97,6 +100,8 @@ impl State {
             graph.add_node(rd_sim);
         }
 
+        graph.add_node(postprocess);
+
         // get the number of simulations
         // TODO now that I have defined slots I don't need the simulation counts any more
         let number_of_sims = graph.simulaton_count();
@@ -119,10 +124,10 @@ impl State {
                 1 => {
                     // right side
                     let params = SystemParamsUniform {
-                        du_rate: 0.16,
-                        dv_rate: 0.08,
-                        feed: 0.025,
-                        kill: 0.055,
+                        du_rate: 0.20,
+                        dv_rate: 0.10,
+                        feed: 0.037,
+                        kill: 0.062,
                     };
                     sim_node.set_params(&gpu_res, params);
                 }
@@ -139,7 +144,26 @@ impl State {
             if let Some(brush_node) = graph.get_node_mut::<ReactionDiffusionBrushNode>() {
                 brush_node.set_targets(main_name.clone(), output_2_name.clone());
             }
-            if let Some(display_node) = graph.get_node_mut::<ReactionDiffusionDisplayNode>() {
+
+            let pp_main_name = format!("{}_pp", main_name);
+            let pp_2_name = output_2_name.as_ref().map(|n| format!("{}_pp", n));
+
+            if let Some(post_node) = graph.get_node_mut::<PostProcessingNode>() {
+                // Postprocess reads sim outputs and writes
+                post_node.set_targets(
+                    main_name.clone(),     // main output is pp main input
+                    output_2_name.clone(), // second output is pp seond input
+                    pp_main_name.clone(),  // main pp output sent for rendering
+                    pp_2_name.clone(),     // second pp output sent for rendering
+                );
+
+                // Display samples the postprocessed outputs
+                if let Some(display_node) = graph.get_node_mut::<ReactionDiffusionDisplayNode>() {
+                    display_node.set_targets(pp_main_name, pp_2_name);
+                }
+            } else if let Some(display_node) = graph.get_node_mut::<ReactionDiffusionDisplayNode>()
+            {
+                // no postprocess node display raw sim outputs
                 display_node.set_targets(main_name.clone(), output_2_name.clone());
             }
         }
