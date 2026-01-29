@@ -1,8 +1,3 @@
-// TODO: I need to put all consts somewhere and just take them from there
-// hard coding is not the way :(
-const WIDTH : u32 = 1280;
-const HEIGHT : u32 = 1280;
-
 // brush parameters
 struct BrushUniform {
     c_x: f32,
@@ -22,12 +17,8 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
     let x_u32 = gid.x; 
     let y_u32 = gid.y;
 
-    // bounds
-    if x_u32 >= WIDTH || y_u32 >= HEIGHT { return; }
-
     // if inactive don't draw
     if brush.radius <= 0.0 { return; }
-
 
     let x_float32 = f32(x_u32);
     let y_float32 = f32(y_u32);

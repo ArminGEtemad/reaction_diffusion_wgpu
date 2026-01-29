@@ -1,5 +1,8 @@
+use crate::{
+    rd_system::StartingPattern,
+    state::{Side, State},
+};
 use std::sync::Arc;
-
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -7,11 +10,6 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::Window,
-};
-
-use crate::{
-    rd_system::StartingPattern,
-    state::{Side, State},
 };
 
 mod gpu_resources;
@@ -256,7 +254,7 @@ impl ApplicationHandler for App {
                                 self.sim_side,
                             );
                             println!(
-                                "Simulation {:?} restarted with the starting pattern: left={:?}, right{:?}",
+                                "Simulation {:?} restarted with the starting pattern: left={:?}, right={:?}",
                                 self.sim_side,
                                 self.current_starting_pattern_left,
                                 self.current_starting_pattern_right

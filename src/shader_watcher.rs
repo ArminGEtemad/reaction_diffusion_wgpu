@@ -1,10 +1,9 @@
+use notify::{
+    Event, EventKind, RecommendedWatcher, Watcher, event::ModifyKind, recommended_watcher,
+};
 use std::{
     path::PathBuf,
     sync::mpsc::{Receiver, channel},
-};
-
-use notify::{
-    Event, EventKind, RecommendedWatcher, Watcher, event::ModifyKind, recommended_watcher,
 };
 
 pub struct ShaderWatcher {

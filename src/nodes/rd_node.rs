@@ -23,6 +23,7 @@ pub struct ReactionDiffustionTextureNames {
 pub struct ReactionDiffusionSimulationNode {
     slot_idx: u32,
     rd_sim: ReactionDiffusionSystem,
+    sys_config: SystemConfig,
     texture_names: ReactionDiffustionTextureNames,
     do_reset: Option<StartingPattern>,
 }
@@ -30,15 +31,16 @@ pub struct ReactionDiffusionSimulationNode {
 impl ReactionDiffusionSimulationNode {
     pub fn new(
         gpu_res: &GpuResource,
-        sys_config: SystemConfig,
         texture_names: ReactionDiffustionTextureNames,
         slot_idx: u32,
     ) -> Self {
-        let rd_sim = ReactionDiffusionSystem::new(gpu_res, sys_config);
+        let rd_sim = ReactionDiffusionSystem::new(gpu_res);
+        let sys_config = SystemConfig::new();
 
         Self {
             slot_idx,
             rd_sim,
+            sys_config,
             texture_names,
             do_reset: Some(StartingPattern::CleanSheet), // Staring with clean sheet makes more sense
         }
@@ -68,7 +70,8 @@ impl RenderNode for ReactionDiffusionSimulationNode {
     }
 
     fn prepare(&mut self, registry: &mut ResourceRegistry, gpu_res: &GpuResource) {
-        let (width, height) = self.rd_sim.rd_size();
+        let width = self.sys_config.width;
+        let height = self.sys_config.height;
 
         registry.storage_texture_creator(
             self.texture_names.ping.as_str(),
@@ -119,7 +122,8 @@ impl RenderNode for ReactionDiffusionSimulationNode {
         frame: &mut FrameContext,
         per_frame_parames: &PerFrameParameters,
     ) {
-        let (width, height) = self.rd_sim.rd_size();
+        let width = self.sys_config.width;
+        let height = self.sys_config.height;
 
         if let Some(pattern) = self.do_reset.take() {
             if let (Some(ping), Some(pong)) = (

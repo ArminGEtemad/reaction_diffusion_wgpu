@@ -1,5 +1,3 @@
-use std::num::NonZeroU64;
-
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
     rd_system::load_ablsolute_path,
@@ -9,6 +7,7 @@ use crate::{
     },
 };
 use bytemuck::{Pod, Zeroable, bytes_of};
+use std::num::NonZeroU64;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,

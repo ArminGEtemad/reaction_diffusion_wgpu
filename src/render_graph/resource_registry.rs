@@ -33,38 +33,6 @@ impl ResourceRegistry {
         self.views.get(name)
     }
 
-    // does it exist? if a texture with name doesn't exist create it now
-    // this is used for display
-    #[allow(dead_code)]
-    pub fn color_texture_creator(&mut self, name: &str, gpu_res: &GpuResource) {
-        if self.textures.contains_key(name) {
-            return;
-        }
-
-        let size = gpu_res.size;
-        let format = gpu_res.config.format;
-
-        let texture = gpu_res.device.create_texture(&TextureDescriptor {
-            label: Some(&format!("Register Texture Descriptor {}", name)),
-            size: Extent3d {
-                width: size.width,
-                height: size.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-
-        let view = texture.create_view(&TextureViewDescriptor::default());
-
-        self.textures
-            .insert(name.to_string(), TextureResource { texture, view });
-    }
-
     // creates the storeage texture for compute
     pub fn storage_texture_creator(
         &mut self,

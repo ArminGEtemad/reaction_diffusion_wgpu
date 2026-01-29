@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     InputState,
     gpu_resources::{FrameContext, GpuResource},
@@ -9,10 +7,11 @@ use crate::{
         post_processing_1_node::PostProcessingNode,
         rd_node::{ReactionDiffusionSimulationNode, ReactionDiffustionTextureNames},
     },
-    rd_system::{StartingPattern, SystemConfig, SystemParamsUniform},
+    rd_system::{StartingPattern, SystemParamsUniform},
     render_graph::{graph::RenderGraph, node::PerFrameParameters},
     shader_watcher::ShaderWatcher,
 };
+use std::sync::Arc;
 use wgpu::SurfaceError;
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -54,11 +53,6 @@ impl State {
         let gpu_res = GpuResource::new(window).await?;
         let mut graph = RenderGraph::new();
 
-        let sys_config = SystemConfig {
-            width: 1280,
-            height: 1280,
-        };
-
         // the enabled can be changed to false if we want only one screen
         let slots = vec![
             SimSlotConfig {
@@ -90,12 +84,8 @@ impl State {
 
             slot_names.push(texture_names.output.clone());
 
-            let rd_sim = ReactionDiffusionSimulationNode::new(
-                &gpu_res,
-                sys_config.clone(),
-                texture_names,
-                slot.slot_idx,
-            );
+            let rd_sim =
+                ReactionDiffusionSimulationNode::new(&gpu_res, texture_names, slot.slot_idx);
 
             graph.add_node(rd_sim);
         }

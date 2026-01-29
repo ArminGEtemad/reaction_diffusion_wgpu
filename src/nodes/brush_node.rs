@@ -1,13 +1,13 @@
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
     nodes::consts::*,
-    rd_system::{BrushUniform, load_ablsolute_path},
+    rd_system::{SystemConfig, load_ablsolute_path},
     render_graph::{
         node::{PassType, PerFrameParameters, RenderNode},
         resource_registry::ResourceRegistry,
     },
 };
-use bytemuck::bytes_of;
+use bytemuck::{Pod, Zeroable, bytes_of};
 use std::num::NonZeroU64;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -16,7 +16,19 @@ use wgpu::{
 
 // the brush node owns the bgls and the pipelines since it is not
 // necessary for the RD system (it is just a feature)
+
+// Brush
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct BrushUniform {
+    pub c_x: f32,    // 4 byte
+    pub c_y: f32,    // 4 byte
+    pub radius: f32, // 4 byte
+    pub mode: u32,   // 4 byte
+}
 pub struct ReactionDiffusionBrushNode {
+    sys_config: SystemConfig,
+
     brush_buffer: Buffer,
     brush_bgl: BindGroupLayout,
     brush_pipeline: ComputePipeline,
@@ -28,6 +40,8 @@ pub struct ReactionDiffusionBrushNode {
 impl ReactionDiffusionBrushNode {
     pub fn new(gpu_res: &GpuResource) -> Self {
         let device = &gpu_res.device;
+
+        let sys_config = SystemConfig::new();
 
         let brush_shader_path = load_ablsolute_path("shaders/brush_compute.wgsl");
         let brush_shader = gpu_res.device.create_shader_module(ShaderModuleDescriptor {
@@ -94,6 +108,7 @@ impl ReactionDiffusionBrushNode {
         });
 
         Self {
+            sys_config,
             brush_buffer,
             brush_bgl,
             brush_pipeline,
@@ -143,8 +158,8 @@ impl RenderNode for ReactionDiffusionBrushNode {
 
         let output_2_name_opt = self.output_2.as_deref();
 
-        // TODO hardcoded now and should be read from the system config
-        let (width, height) = (1280_u32, 1280_u32);
+        let width = self.sys_config.width;
+        let height = self.sys_config.height;
 
         let mut brush_uniform = BrushUniform {
             c_x: 0.0,

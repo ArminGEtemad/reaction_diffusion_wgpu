@@ -1,33 +1,22 @@
+// importing crates
+use crate::{
+    gpu_resources::{FrameContext, GpuResource},
+    nodes::consts::{WG_X, WG_Y},
+};
 use bytemuck::{Pod, Zeroable, bytes_of};
 use std::{fs, num::NonZeroU64, path::PathBuf, time::Instant};
-
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
 
-use crate::{
-    gpu_resources::{FrameContext, GpuResource},
-    nodes::consts::{WG_X, WG_Y},
-};
-
-#[derive(Clone, Debug)]
-pub struct SystemConfig {
-    pub width: u32,
-    pub height: u32,
-}
-
-// For better mathematical stability
-// we can do N small simulation steps per frame
-pub struct SimulationParameters {
-    pub dt_per_step: f32,
-    pub substeps_per_frame: u32,
-}
+// define helper functions
 
 // helper function to have a dynamical shader address
 // so the source is not "hard coded" in the compile time
 pub fn load_ablsolute_path(relative_path: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative_path); // making absolute path
+    // making absolute path
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative_path);
     fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("Failed to read shader {:?}\nError: {}", path, e))
 }
@@ -44,15 +33,21 @@ pub fn write_pattern_to_starting_space(
     let mut data = vec![0.0; (width * height * 4) as usize]; // all pixels with all RGBA elements 0.0
 
     match pattern {
+        // circle pattern
         StartingPattern::Circle => {
+            // diameter of the initial circle
+            // TODO the size of the circle can be chosen by the user
+            let diameter = 10000_i32;
+
             // loop over all the pixels
             for y in 0..height {
                 for x in 0..width {
                     let pixel_idx = ((y * width + x) * 4) as usize;
 
                     // element U everywhere
-                    // element V only in blob
                     let u = 1.0_f32;
+
+                    // element V only in blob so initially nowhere
                     let mut v = 0.0_f32;
 
                     // blob in the center for element V
@@ -62,10 +57,9 @@ pub fn write_pattern_to_starting_space(
                     let dist_x = x as i32 - center_x;
                     let dist_y = y as i32 - center_y;
 
-                    // TODO the size of the circle can be chosen by the user
-                    if dist_x.abs() * dist_x.abs() + dist_y.abs() * dist_y.abs() < 100 {
-                        // TODO check out standard initializations
-                        v = 1.0; // add element V to the area
+                    if dist_x.abs() * dist_x.abs() + dist_y.abs() * dist_y.abs() < diameter {
+                        // add element V to the area
+                        v = 0.5;
                     }
 
                     // write the data to the channels
@@ -77,15 +71,19 @@ pub fn write_pattern_to_starting_space(
             }
         }
 
+        // Square pattern
         StartingPattern::Square => {
+            // half side size
+            let half_side_size = 100_i32;
             // loop over all the pixels
             for y in 0..height {
                 for x in 0..width {
                     let pixel_idx = ((y * width + x) * 4) as usize;
 
                     // element U everywhere
-                    // element V only in blob
                     let u = 1.0_f32;
+
+                    // element V only in blob so here nowhere
                     let mut v = 0.0_f32;
 
                     // blob in the center for element V
@@ -95,9 +93,9 @@ pub fn write_pattern_to_starting_space(
                     let dist_x = x as i32 - center_x;
                     let dist_y = y as i32 - center_y;
 
-                    if dist_x.abs() < 10 && dist_y.abs() < 10 {
-                        // TODO check out standard initializations
-                        v = 1.0; // add element V to the area
+                    if dist_x.abs() < half_side_size && dist_y.abs() < half_side_size {
+                        // add element V to the area
+                        v = 0.5;
                     }
 
                     // write the data to the channels
@@ -108,6 +106,8 @@ pub fn write_pattern_to_starting_space(
                 }
             }
         }
+
+        // nothing
         StartingPattern::CleanSheet => {
             for y in 0..height {
                 for x in 0..width {
@@ -163,6 +163,22 @@ pub fn write_pattern_to_starting_space(
     );
 }
 
+// --- define structs ---
+
+// Resolution of the simulation
+#[derive(Clone, Copy)]
+pub struct SystemConfig {
+    pub width: u32,
+    pub height: u32,
+}
+
+// For better mathematical stability
+// we can do N small simulation steps per frame
+pub struct SimulationParameters {
+    pub dt_per_step: f32,
+    pub substeps_per_frame: u32,
+}
+
 // time
 // this lives in group 0 binding 0 (RD shader)
 #[repr(C)] // format expected by the gpu
@@ -181,17 +197,6 @@ pub struct SystemParamsUniform {
     pub dv_rate: f32,
     pub feed: f32,
     pub kill: f32,
-}
-
-// Brush
-// this lives in group 0 binding 0 (brush shader)
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-pub struct BrushUniform {
-    pub c_x: f32,    // 4 byte
-    pub c_y: f32,    // 4 byte
-    pub radius: f32, // 4 byte
-    pub mode: u32,   // 4 byte
 }
 
 // different starting patterns
@@ -228,10 +233,25 @@ pub struct ReactionDiffusionSystem {
     pub use_ping_as_source: bool,
 }
 
+// --- implementations ---
+
+// Defining the resolution of the simulation
+impl SystemConfig {
+    pub fn new() -> Self {
+        Self {
+            width: 1280_u32,
+            height: 1280_u32,
+        }
+    }
+}
+
 impl ReactionDiffusionSystem {
-    pub fn new(gpu_res: &GpuResource, sys_config: SystemConfig) -> Self {
+    pub fn new(gpu_res: &GpuResource) -> Self {
         // importing resources
         let device_m = &gpu_res.device;
+
+        // initializing the resolution
+        let sys_config = SystemConfig::new();
 
         // time uniform buffer
         let time_uniform = TimeUniform {
@@ -239,19 +259,22 @@ impl ReactionDiffusionSystem {
             _pad: [0.0; 3],
         };
 
+        // speed of the simulation
         let sim_parameters = SimulationParameters {
+            // simulation is rendered as if dt_per_step x substeps_per_frame = dt
             dt_per_step: 0.5,
             substeps_per_frame: 5,
         };
 
+        let start_instant = Instant::now();
+        let last_time: f32 = 0.0;
+
+        // creating time buffer to upload to the shader
         let time_buffer = device_m.create_buffer_init(&BufferInitDescriptor {
             label: Some("Time Uniform Buffer"),
             contents: bytemuck::bytes_of(&time_uniform),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
-
-        let start_instant = Instant::now();
-        let last_time: f32 = 0.0;
 
         let rd_sys_parameters = SystemParamsUniform {
             du_rate: 0.18,
@@ -433,7 +456,8 @@ impl ReactionDiffusionSystem {
         let device = &gpu_res.device;
 
         // get the size for dispatch
-        let (width, height) = self.rd_size();
+        let width = self.sys_config.width;
+        let height = self.sys_config.height;
 
         // find out the source and destination ping or pong
         let (compute_source, compute_destination) = if self.use_ping_as_source {
@@ -613,11 +637,6 @@ impl ReactionDiffusionSystem {
     pub fn reset_time(&mut self) {
         self._start_instant = Instant::now();
         self._last_time = 0.0;
-    }
-
-    // a helper function for WIDTH and WEIGHT
-    pub fn rd_size(&self) -> (u32, u32) {
-        (self.sys_config.width, self.sys_config.height)
     }
 
     pub fn is_ping_source(&self) -> bool {

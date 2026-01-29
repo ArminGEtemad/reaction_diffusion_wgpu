@@ -1,13 +1,13 @@
-use wgpu::*;
-
 use crate::{
     gpu_resources::GpuResource,
     nodes::consts::{WG_X, WG_Y},
-    rd_system::load_ablsolute_path,
+    rd_system::{SystemConfig, load_ablsolute_path},
     render_graph::node::{PassType, RenderNode},
 };
+use wgpu::*;
 
 pub struct PostProcessingNode {
+    sys_config: SystemConfig,
     post_bgl: BindGroupLayout,
     post_pipeline: ComputePipeline,
 
@@ -21,6 +21,8 @@ pub struct PostProcessingNode {
 impl PostProcessingNode {
     pub fn new(gpu_res: &GpuResource) -> Self {
         let device = &gpu_res.device;
+
+        let sys_config = SystemConfig::new();
 
         let shader_path = load_ablsolute_path("shaders/post_processing_compute_1.wgsl");
         let shader = device.create_shader_module(ShaderModuleDescriptor {
@@ -72,6 +74,7 @@ impl PostProcessingNode {
         });
 
         Self {
+            sys_config,
             post_bgl,
             post_pipeline: post_conpute_pipeline,
             input_1: None,
@@ -119,7 +122,10 @@ impl RenderNode for PostProcessingNode {
         _per_frame_parameters: &crate::render_graph::node::PerFrameParameters,
     ) {
         let device = &gpu_res.device;
-        let (width, height) = (1280_u32, 1280_u32);
+
+        let width = self.sys_config.width;
+        let height = self.sys_config.height;
+
         let workgroup_x = (width + WG_X - 1) / WG_X;
         let workgroup_y = (height + WG_Y - 1) / WG_Y;
 

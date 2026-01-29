@@ -1,9 +1,8 @@
-use std::any::Any;
-
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
     render_graph::resource_registry::ResourceRegistry,
 };
+use std::any::Any;
 
 pub struct PerFrameParameters {
     pub mouse_pos: Option<(f32, f32)>,
