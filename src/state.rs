@@ -6,6 +6,7 @@ use crate::{
         display_node::ReactionDiffusionDisplayNode,
         post_processing_1_node::PostProcessingNode,
         rd_node::{ReactionDiffusionSimulationNode, ReactionDiffustionTextureNames},
+        ui_overlay_node::UiOverlayNode,
     },
     rd_system::{StartingPattern, SystemParamsUniform},
     render_graph::{graph::RenderGraph, node::PerFrameParameters},
@@ -70,10 +71,12 @@ impl State {
         // add brush and display node.
         let brush = ReactionDiffusionBrushNode::new(&gpu_res);
         let postprocess = PostProcessingNode::new(&gpu_res);
+        let ui_overlay = UiOverlayNode::new(&gpu_res);
 
         let rd_display = ReactionDiffusionDisplayNode::new(&gpu_res);
         graph.add_node(brush);
         graph.add_node(rd_display);
+        graph.add_node(ui_overlay);
 
         for slot in &slots {
             if !slot.enabled {
@@ -183,6 +186,12 @@ impl State {
 
         let mut frame: FrameContext = self.gpu_res.begin_frame()?;
 
+        let ui_active_side = match input.sim_side {
+            Side::Left => 1,
+            Side::Right => 2,
+            Side::AllSides => 3,
+        };
+
         let per_frame_parameters = PerFrameParameters {
             mouse_pos: input.mouse_pos,
             mouse_down: input.mouse_down,
@@ -190,6 +199,7 @@ impl State {
             mode: input.mode,
             paused: input.paused,
             debug_mode: input.debug_mode,
+            ui_active_side,
         };
 
         self.graph
