@@ -11,6 +11,7 @@ pub struct PerFrameParameters {
     pub mode: u32,
     pub paused: bool,
     pub debug_mode: bool,
+    pub ui_active_side: u32,
 }
 
 // Compute pass must always come before Render pass
