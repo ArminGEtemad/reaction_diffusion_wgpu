@@ -176,8 +176,14 @@ impl RenderNode for ReactionDiffusionBrushNode {
             let h = gpu_res.size.height as f32;
 
             if w > 0.0 && h > 0.0 {
-                let nx = (mx / w).clamp(0.0, 1.0);
+                let nx_screen = (mx / w).clamp(0.0, 1.0);
                 let ny = (my / h).clamp(0.0, 1.0);
+
+                if nx_screen >= 0.9 {
+                    return;
+                }
+
+                let nx = (nx_screen / 0.9).clamp(0.0, 1.0);
 
                 // is rd2 available
                 let rd2_view_opt = output_2_name_opt.and_then(|name| registry.get_view(name));
