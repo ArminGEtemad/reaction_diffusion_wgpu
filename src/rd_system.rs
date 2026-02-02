@@ -277,10 +277,10 @@ impl ReactionDiffusionSystem {
         });
 
         let rd_sys_parameters = SystemParamsUniform {
-            du_rate: 0.18,
-            dv_rate: 0.085,
-            feed: 0.037,
-            kill: 0.061,
+            du_rate: 0.0,
+            dv_rate: 0.0,
+            feed: 0.0,
+            kill: 0.0,
         };
 
         let rd_sys_uniform = device_m.create_buffer_init(&BufferInitDescriptor {
