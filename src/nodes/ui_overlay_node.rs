@@ -15,7 +15,8 @@ use wgpu::*;
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct UiParams {
     pub active_side: u32,
-    _pad: [u32; 3],
+    pub paused: u32,
+    _pad: [u32; 2],
 }
 
 pub struct UiOverlayNode {
@@ -36,7 +37,8 @@ impl UiOverlayNode {
 
         let initial_params = UiParams {
             active_side: 0,
-            _pad: [0; 3],
+            paused: 0,
+            _pad: [0; 2],
         };
 
         let params_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -170,7 +172,8 @@ impl RenderNode for UiOverlayNode {
         // update uniform
         let params = UiParams {
             active_side: per_frame.ui_active_side,
-            _pad: [0; 3],
+            paused: per_frame.paused as u32, // turning the boolean to u32
+            _pad: [0; 2],
         };
         gpu_res
             .queue
