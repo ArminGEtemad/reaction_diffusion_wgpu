@@ -1,6 +1,7 @@
 struct UiParams {
     // 1 = left, 2 = right, 3 = both
     active_side: u32,
+    pause: u32,
 }
 
 @group(0) @binding(0)
@@ -56,9 +57,10 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
 
     // Colors
     let background_ui_color = vec4<f32>(0.001, 0.001, 0.01, 1.0);
-    let panel_color = vec4<f32>(0.3, 0.8, 0.0, 1.0);
+    var panel_color = vec4<f32>(0.3, 0.8, 0.0, 1.0); // can be changed to the pause color
     let border_color = vec4<f32>(0.1, 0.1, 0.1, 1.0);
     let lamp_color = vec4<f32>(0.9, 0.7, 0.2, 0.7);
+    let pause_color = vec4<f32>(0.7, 0.0, 0.1, 1.0);
 
     // panel
     let panel_x_max = 1.0; let panel_x_min = x_ui_min;
@@ -108,22 +110,29 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
     let circ_mask_right = max(exp(-100.0*(dist_right - r)), (smoothstep(r+aa, r-aa, dist_right)));
     let circ_mask_clamped_left = clamp(circ_mask_left, 0.0, 1.0);
     let circ_mask_clamped_right = clamp(circ_mask_right, 0.0, 1.0);
+    let both_lamp_masks = max(circ_mask_clamped_left, circ_mask_clamped_right);
 
     var final_color = background_ui_color;
     var panel_switch = 0.0;
     var lamp_switch = 0.0;
 
-    if (u_ui.active_side == 1u) {
+    // paused logic
+    if (u_ui.pause != 0u) {
+        panel_color = pause_color;
+        panel_switch = combined_glow_mask;
+    } else {
+        if (u_ui.active_side == 1u) {
         panel_switch = leftg_mask;
         lamp_switch = circ_mask_clamped_left;
-    } else if (u_ui.active_side == 2u) {
-        panel_switch = rightg_mask;
-        lamp_switch = circ_mask_clamped_right;
-    } else if (u_ui.active_side == 3u) {
-        panel_switch = combined_glow_mask;
-        lamp_switch = max(circ_mask_clamped_left, circ_mask_clamped_right);
+        } else if (u_ui.active_side == 2u) {
+            panel_switch = rightg_mask;
+            lamp_switch = circ_mask_clamped_right;
+        } else if (u_ui.active_side == 3u) {
+            panel_switch = combined_glow_mask;
+            lamp_switch = both_lamp_masks;
+        }
     }
-
+    
     final_color = mix(final_color, panel_color, panel_switch);
     final_color = mix(final_color, border_color, border_mask);
     final_color = mix(final_color, lamp_color, lamp_switch);
