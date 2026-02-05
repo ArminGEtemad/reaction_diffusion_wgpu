@@ -48,94 +48,101 @@ fn vs_main(@builtin(vertex_index) vid : u32) -> VSOut {
 @fragment
 fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
     let uv = in.uv;
-    let x_ui_min = 0.9;
+    let screen_ratio = fwidth(uv.y) / fwidth(uv.x);
+    let uv_corr = vec2<f32>(uv.x * screen_ratio, uv.y);
+    let u_ui_min = 0.9;
     let aa = max(fwidth(uv.x), fwidth(uv.y));
 
-    if (uv.x < x_ui_min) {
+    if (uv.x < u_ui_min) {
         discard;
     }
 
     // Colors
     let background_ui_color = vec4<f32>(0.001, 0.001, 0.01, 1.0);
-    var panel_color = vec4<f32>(0.3, 0.8, 0.0, 1.0); // can be changed to the pause color
+    var panel_color = vec4<f32>(0.1, 0.8, 0.0, 1.0); // can be changed to the pause color
     let border_color = vec4<f32>(0.1, 0.1, 0.1, 1.0);
-    let lamp_color = vec4<f32>(0.9, 0.7, 0.2, 0.7);
     let pause_color = vec4<f32>(0.7, 0.0, 0.1, 1.0);
 
     // panel
-    let panel_x_max = 1.0; let panel_x_min = x_ui_min;
-    let panel_y_max = 1.0; let panel_y_min = 0.9;
-    let x_panel_mask = geometric_logic(panel_x_min, panel_x_max, aa, uv.x);
-    let y_panel_mask = geometric_logic(panel_y_min, panel_y_max, aa, uv.y);
-    let total_area_mask = x_panel_mask * y_panel_mask;
+    let panel_u_max = 1.0; let panel_u_min = u_ui_min;
+    let panel_v_max = 1.0; let panel_v_min = 0.9;
+    let u_panel_mask = geometric_logic(panel_u_min, panel_u_max, aa, uv.x);
+    let v_panel_mask = geometric_logic(panel_v_min, panel_v_max, aa, uv.y);
+    let total_area_mask = u_panel_mask * v_panel_mask;
 
-    // panel glow area
-    let x_margin = 0.003;
-    let y_margin = 0.005;
-    let yg_min = panel_y_min + y_margin;
-    let yg_max = panel_y_max - y_margin;
-    let panel_split_mid = center_finder(panel_x_min, panel_x_max);
+    // panel area
+    let u_margin = 0.003;
+    let v_margin = 0.005;
+    let vg_min = panel_v_min + v_margin;
+    let vg_max = panel_v_max - v_margin;
+    let panel_split_mid = center_finder(panel_u_min, panel_u_max);
     
-    // left glow area
-    let leftg_x_min = panel_x_min + x_margin;
-    let leftg_x_max = panel_split_mid - x_margin * 0.5;
-    let leftg_x_mask = geometric_logic(leftg_x_min, leftg_x_max, aa, uv.x);
-    let leftg_y_mask = geometric_logic(yg_min, yg_max, aa, uv.y);
-    let leftg_mask = leftg_x_mask * leftg_y_mask;
+    // left area inside panel
+    let leftg_u_min = panel_u_min + u_margin;
+    let leftg_u_max = panel_split_mid - u_margin * 0.5;
+    let leftg_u_mask = geometric_logic(leftg_u_min, leftg_u_max, aa, uv.x);
+    let leftg_v_mask = geometric_logic(vg_min, vg_max, aa, uv.y);
+    let leftg_mask = leftg_u_mask * leftg_v_mask;
 
-    // right glow area
-    let rightg_x_min = panel_split_mid + (x_margin*0.5);
-    let rightg_x_max = panel_x_max - x_margin;
-    let rightg_x_mask = geometric_logic(rightg_x_min, rightg_x_max, aa, uv.x);
-    let rightg_y_mask = geometric_logic(yg_min, yg_max, aa, uv.y);
-    let rightg_mask = rightg_x_mask * rightg_y_mask;
+    // right area inside panel
+    let rightg_u_min = panel_split_mid + (u_margin*0.5);
+    let rightg_u_max = panel_u_max - u_margin;
+    let rightg_u_mask = geometric_logic(rightg_u_min, rightg_u_max, aa, uv.x);
+    let rightg_v_mask = geometric_logic(vg_min, vg_max, aa, uv.y);
+    let rightg_mask = rightg_u_mask * rightg_v_mask;
 
-    // combining two glow areas with OR
-    // whole glow area is left OR right
+    // combining two areas inside panel areas with OR
+    // whole area is left OR right inside panel
     let combined_glow_mask = max(leftg_mask, rightg_mask);
     
     // The border mask is the total area MINUS the glow areas
     let border_mask = clamp(total_area_mask - combined_glow_mask, 0.0, 1.0);
 
     // lamp
-    let cx_left = center_finder(leftg_x_max, leftg_x_min);
-    let cx_right = center_finder(rightg_x_max, rightg_x_min);
-    let cy = center_finder(yg_max, yg_min);
-    let c_left = vec2<f32>(cx_left, cy);
-    let c_right = vec2<f32>(cx_right, cy);
-    let dist_left = distance(uv, c_left);
-    let dist_right = distance(uv, c_right);
-    let r = 0.005;
-    let circ_mask_left = max(exp(-100.0*(dist_left - r)), (1.0 - smoothstep(r-aa, r+aa, dist_left)));
-    let circ_mask_right = max(exp(-100.0*(dist_right - r)), (smoothstep(r+aa, r-aa, dist_right)));
-    let circ_mask_clamped_left = clamp(circ_mask_left, 0.0, 1.0);
-    let circ_mask_clamped_right = clamp(circ_mask_right, 0.0, 1.0);
-    let both_lamp_masks = max(circ_mask_clamped_left, circ_mask_clamped_right);
+    let lamp_intensity = 0.001;
+    let cu_left = center_finder(leftg_u_max, leftg_u_min);
+    let cu_right = center_finder(rightg_u_max, rightg_u_min);
+    let cy = center_finder(vg_max, vg_min);
+    let c_left = vec2<f32>(cu_left*screen_ratio, cy);
+    let c_right = vec2<f32>(cu_right*screen_ratio, cy);
+    let dist_left = distance(uv_corr, c_left);
+    let dist_right = distance(uv_corr, c_right);
 
+    // glow
+    // with inverse square law
+    let glow_left = lamp_intensity / (dist_left * dist_left + 0.01);
+    let glow_right = lamp_intensity / (dist_right * dist_right + 0.01);
+    let both_glow = max(glow_left, glow_right);
+
+    // colors
     var final_color = background_ui_color;
     var panel_switch = 0.0;
-    var lamp_switch = 0.0;
+    var active_glow = 0.0;
 
-    // paused logic
+    // Pause Play logic
     if (u_ui.pause != 0u) {
         panel_color = pause_color;
         panel_switch = combined_glow_mask;
     } else {
         if (u_ui.active_side == 1u) {
-        panel_switch = leftg_mask;
-        lamp_switch = circ_mask_clamped_left;
+            panel_switch = leftg_mask;
+            active_glow = glow_left;
         } else if (u_ui.active_side == 2u) {
             panel_switch = rightg_mask;
-            lamp_switch = circ_mask_clamped_right;
+            active_glow = glow_right;
         } else if (u_ui.active_side == 3u) {
             panel_switch = combined_glow_mask;
-            lamp_switch = both_lamp_masks;
+
+            active_glow = both_glow; // Both contribute
         }
     }
-    
-    final_color = mix(final_color, panel_color, panel_switch);
+
+    // Panel and border colored first
     final_color = mix(final_color, border_color, border_mask);
-    final_color = mix(final_color, lamp_color, lamp_switch);
+
+    // inside panel
+    final_color = mix(final_color, panel_color, panel_switch);
+    final_color += (panel_color * active_glow);
 
     return vec4<f32>(final_color);
 }
