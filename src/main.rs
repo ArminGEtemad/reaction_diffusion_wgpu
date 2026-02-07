@@ -143,7 +143,7 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.05,
                 };
 
-                self.input.brush_radius = (self.input.brush_radius + scroll_d).clamp(1.0, 20.0);
+                self.input.brush_radius = (self.input.brush_radius + scroll_d).clamp(1.0, 30.0);
                 println!("Brush radius: {:?}", self.input.brush_radius);
             }
 
