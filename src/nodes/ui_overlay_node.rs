@@ -17,7 +17,7 @@ pub struct UiParams {
     pub active_side: u32,
     pub paused: u32,
     pub brush_radius: f32,
-    _pad: u32,
+    pub mode: u32,
 }
 
 pub struct UiOverlayNode {
@@ -40,7 +40,7 @@ impl UiOverlayNode {
             active_side: 0,
             paused: 0,
             brush_radius: 0.0,
-            _pad: 0,
+            mode: 0,
         };
 
         let params_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -176,7 +176,7 @@ impl RenderNode for UiOverlayNode {
             active_side: per_frame.ui_active_side,
             paused: per_frame.paused as u32, // turning the boolean to u32
             brush_radius: per_frame.brush_radius,
-            _pad: 0,
+            mode: per_frame.mode,
         };
         gpu_res
             .queue
