@@ -4,6 +4,7 @@ struct UiParams {
     active_side: u32, // 1 = left, 2 = right, 3 = both
     pause: u32,
     brush_radius: f32,
+    brush_mode: u32,
 }
 
 @group(0) @binding(0)
@@ -24,6 +25,11 @@ fn geometric_logic(min: f32, max:f32, smoothness: f32, axis:f32) -> f32 {
 
     // multiplication as in && giving us smooth edges on left and right
     return s * inv_s;
+}
+
+// circle AA
+fn circle_aa(radius: f32, dist: f32, smoothness: f32) -> f32 {
+    return smoothstep(radius - smoothness, radius + smoothness, dist);
 }
 
 // helper function to find centers
@@ -64,7 +70,8 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
     var panel_color = vec4<f32>(0.1, 0.8, 0.0, 1.0); // can be changed to the pause color
     let border_color = vec4<f32>(0.1, 0.1, 0.1, 1.0);
     let pause_color = vec4<f32>(0.7, 0.0, 0.1, 1.0);
-    let bush_preview_color = vec4<f32>(0.7, 0.7, 0.7, 1.0);
+    var bush_preview_color = vec4<f32>(0.7, 0.7, 0.4, 1.0);
+    let active_brush_mode_color = vec4<f32>(0.0, 1.0, 0.1, 1.0);
 
     // panel
     let panel_u_max = 1.0; let panel_u_min = u_ui_min;
@@ -152,15 +159,37 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
         final_color = vec4<f32>(0.0, 0.1, 0.1, 1.0);
     }
 
-    let c_brush= vec2<f32>(panel_split_mid * screen_ratio, 0.25);
+    let c_brush= vec2<f32>(panel_split_mid * screen_ratio, 0.35);
 
     let uv_radius = u_ui.brush_radius*screen_ratio*fwidth(uv.x);
     let sigma = uv_radius / 2.0;
     let dist_brush = distance(uv_corr, c_brush);
     let gaussian_intensity = exp(- (dist_brush * dist_brush) / (2.0 * sigma * sigma));
 
-    if (gaussian_intensity > EPS) {
-        final_color = mix(final_color, bush_preview_color, gaussian_intensity);
+    final_color = mix(final_color, bush_preview_color, gaussian_intensity);
+
+    // different modes of the brush
+    // three mode and three lamps
+    // configuration
+    let spacing = 0.07;
+    let c_brush_mode_lamp_0 = vec2<f32>(panel_split_mid * screen_ratio, 0.15);
+    let brush_mode_lamp_radius = 0.015;
+
+    for (var i: i32 = -1; i <= 1; i = i + 1) {
+        // three lamps -1, 0, +1
+        let offset = vec2<f32>(f32(i) * spacing, 0.0);
+        let dist_brush_mode = distance(uv_corr, c_brush_mode_lamp_0 + offset);
+        let circ_brush_mode = 1.0 - circle_aa(brush_mode_lamp_radius, dist_brush_mode, aa);
+        var brush_mode_color = vec4<f32>(0.5, 0.5, 0.5, 1.0);
+        // TODO: get rid of if statements
+        if (u_ui.brush_mode == 1u && i == -1) {
+            brush_mode_color = active_brush_mode_color;
+        } else if (u_ui.brush_mode == 2u && i == 0) {
+            brush_mode_color = active_brush_mode_color;
+        } else if (u_ui.brush_mode == 0u && i == 1) {
+            brush_mode_color = active_brush_mode_color;
+        }
+        final_color = mix(final_color, brush_mode_color, circ_brush_mode);
     }
 
     return vec4<f32>(final_color);
