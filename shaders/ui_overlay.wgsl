@@ -1,7 +1,9 @@
+const EPS: f32 = 0.001;
+
 struct UiParams {
-    // 1 = left, 2 = right, 3 = both
-    active_side: u32,
+    active_side: u32, // 1 = left, 2 = right, 3 = both
     pause: u32,
+    brush_radius: f32,
 }
 
 @group(0) @binding(0)
@@ -62,6 +64,7 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
     var panel_color = vec4<f32>(0.1, 0.8, 0.0, 1.0); // can be changed to the pause color
     let border_color = vec4<f32>(0.1, 0.1, 0.1, 1.0);
     let pause_color = vec4<f32>(0.7, 0.0, 0.1, 1.0);
+    let bush_preview_color = vec4<f32>(0.7, 0.7, 0.7, 1.0);
 
     // panel
     let panel_u_max = 1.0; let panel_u_min = u_ui_min;
@@ -110,8 +113,8 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
 
     // glow
     // with inverse square law
-    let glow_left = lamp_intensity / (dist_left * dist_left + 0.01);
-    let glow_right = lamp_intensity / (dist_right * dist_right + 0.01);
+    let glow_left = lamp_intensity / (dist_left * dist_left + EPS);
+    let glow_right = lamp_intensity / (dist_right * dist_right + EPS);
     let both_glow = max(glow_left, glow_right);
 
     // colors
@@ -143,6 +146,22 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
     // inside panel
     final_color = mix(final_color, panel_color, panel_switch);
     final_color += (panel_color * active_glow);
+
+    // half the screen for brush settings
+    if (uv.y < 0.51 && uv.y > 0.49) {
+        final_color = vec4<f32>(0.0, 0.1, 0.1, 1.0);
+    }
+
+    let c_brush= vec2<f32>(panel_split_mid * screen_ratio, 0.25);
+
+    let uv_radius = u_ui.brush_radius*screen_ratio*fwidth(uv.x);
+    let sigma = uv_radius / 2.0;
+    let dist_brush = distance(uv_corr, c_brush);
+    let gaussian_intensity = exp(- (dist_brush * dist_brush) / (2.0 * sigma * sigma));
+
+    if (gaussian_intensity > EPS) {
+        final_color = mix(final_color, bush_preview_color, gaussian_intensity);
+    }
 
     return vec4<f32>(final_color);
 }
