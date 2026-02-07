@@ -40,16 +40,16 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 
     switch brush.mode {
         // 0 add V
-        case 0u: {
+        case 1u: {
             c.y = c.y + normal_distri;
         }
 
         // case 1 add U
-        case 1u: {
+        case 2u: {
             c.x = c.x + normal_distri;
         }
 
-        case 3u: {
+        case 0u: {
             c.x = mix(c.x, default_u, normal_distri);
             c.y = mix(c.y, default_v, normal_distri);
         }

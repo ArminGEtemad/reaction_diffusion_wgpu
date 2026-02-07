@@ -143,7 +143,7 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.05,
                 };
 
-                self.input.brush_radius = (self.input.brush_radius + scroll_d).clamp(1.0, 30.0);
+                self.input.brush_radius = (self.input.brush_radius + scroll_d).clamp(1.0, 40.0);
                 println!("Brush radius: {:?}", self.input.brush_radius);
             }
 
@@ -169,17 +169,17 @@ impl ApplicationHandler for App {
                         println!("Reset Side: Both");
                     }
                     PhysicalKey::Code(KeyCode::Digit1) => {
-                        self.input.mode = 0; // add V
+                        self.input.mode = 1; // add V
                         println!("Add V Mode: {}", self.input.mode);
                     }
 
                     PhysicalKey::Code(KeyCode::Digit2) => {
-                        self.input.mode = 1; // add U
+                        self.input.mode = 2; // add U
                         println!("Add U Mode: {}", self.input.mode);
                     }
 
                     PhysicalKey::Code(KeyCode::Digit0) => {
-                        self.input.mode = 3; // erase
+                        self.input.mode = 0; // erase
                         println!("erase {}", self.input.mode);
                     }
                     // TODO I am assuming both sides exist. Add error handling later
