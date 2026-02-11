@@ -35,14 +35,14 @@ struct InputState {
     paused: bool,
     debug_mode: bool,
     sim_side: Side,
+    current_starting_pattern_left: StartingPattern,
+    current_starting_pattern_right: StartingPattern,
 }
 
 struct App {
     window: Option<Arc<Window>>,
     state: Option<State>,
     input: InputState,
-    current_starting_pattern_left: StartingPattern,
-    current_starting_pattern_right: StartingPattern,
 }
 
 // making the Application
@@ -52,8 +52,6 @@ impl Default for App {
             window: None,
             state: None,
             input: InputState::default(),
-            current_starting_pattern_left: StartingPattern::Circle,
-            current_starting_pattern_right: StartingPattern::Square,
         }
     }
 }
@@ -63,11 +61,13 @@ impl Default for InputState {
         Self {
             mouse_pos: None,
             mouse_down: false,
-            brush_radius: 5.0,
+            brush_radius: 15.0,
             mode: 0,
             paused: false,
             debug_mode: false,
             sim_side: Side::AllSides,
+            current_starting_pattern_left: StartingPattern::Circle,
+            current_starting_pattern_right: StartingPattern::Square,
         }
     }
 }
@@ -186,57 +186,64 @@ impl ApplicationHandler for App {
                     PhysicalKey::Code(KeyCode::KeyA) => {
                         match self.input.sim_side {
                             Side::Left => {
-                                self.current_starting_pattern_left = StartingPattern::Circle;
+                                self.input.current_starting_pattern_left = StartingPattern::Circle;
                             }
                             Side::Right => {
-                                self.current_starting_pattern_right = StartingPattern::Circle;
+                                self.input.current_starting_pattern_right = StartingPattern::Circle;
                             }
                             Side::AllSides => {
-                                self.current_starting_pattern_left = StartingPattern::Circle;
-                                self.current_starting_pattern_right = StartingPattern::Circle;
+                                self.input.current_starting_pattern_left = StartingPattern::Circle;
+                                self.input.current_starting_pattern_right = StartingPattern::Circle;
                             }
                         }
                         println!(
                             "Patterns: left={:?}, right={:?}",
-                            self.current_starting_pattern_left, self.current_starting_pattern_right
+                            self.input.current_starting_pattern_left,
+                            self.input.current_starting_pattern_right
                         );
                     }
 
                     PhysicalKey::Code(KeyCode::KeyB) => {
                         match self.input.sim_side {
                             Side::Left => {
-                                self.current_starting_pattern_left = StartingPattern::Square;
+                                self.input.current_starting_pattern_left = StartingPattern::Square;
                             }
                             Side::Right => {
-                                self.current_starting_pattern_right = StartingPattern::Square;
+                                self.input.current_starting_pattern_right = StartingPattern::Square;
                             }
                             Side::AllSides => {
-                                self.current_starting_pattern_left = StartingPattern::Square;
-                                self.current_starting_pattern_right = StartingPattern::Square;
+                                self.input.current_starting_pattern_left = StartingPattern::Square;
+                                self.input.current_starting_pattern_right = StartingPattern::Square;
                             }
                         }
                         println!(
                             "Patterns: left={:?}, right={:?}",
-                            self.current_starting_pattern_left, self.current_starting_pattern_right
+                            self.input.current_starting_pattern_left,
+                            self.input.current_starting_pattern_right
                         );
                     }
 
                     PhysicalKey::Code(KeyCode::KeyC) => {
                         match self.input.sim_side {
                             Side::Left => {
-                                self.current_starting_pattern_left = StartingPattern::CleanSheet;
+                                self.input.current_starting_pattern_left =
+                                    StartingPattern::CleanSheet;
                             }
                             Side::Right => {
-                                self.current_starting_pattern_right = StartingPattern::CleanSheet;
+                                self.input.current_starting_pattern_right =
+                                    StartingPattern::CleanSheet;
                             }
                             Side::AllSides => {
-                                self.current_starting_pattern_left = StartingPattern::CleanSheet;
-                                self.current_starting_pattern_right = StartingPattern::CleanSheet;
+                                self.input.current_starting_pattern_left =
+                                    StartingPattern::CleanSheet;
+                                self.input.current_starting_pattern_right =
+                                    StartingPattern::CleanSheet;
                             }
                         }
                         println!(
                             "Patterns: left={:?}, right={:?}",
-                            self.current_starting_pattern_left, self.current_starting_pattern_right
+                            self.input.current_starting_pattern_left,
+                            self.input.current_starting_pattern_right
                         );
                     }
 
@@ -249,15 +256,15 @@ impl ApplicationHandler for App {
                         if let Some(st) = &mut self.state {
                             // needs to be updated because of Side enum
                             st.reset(
-                                self.current_starting_pattern_left,
-                                self.current_starting_pattern_right,
+                                self.input.current_starting_pattern_left,
+                                self.input.current_starting_pattern_right,
                                 self.input.sim_side,
                             );
                             println!(
                                 "Simulation {:?} restarted with the starting pattern: left={:?}, right={:?}",
                                 self.input.sim_side,
-                                self.current_starting_pattern_left,
-                                self.current_starting_pattern_right
+                                self.input.current_starting_pattern_left,
+                                self.input.current_starting_pattern_right
                             );
                         }
                     }
