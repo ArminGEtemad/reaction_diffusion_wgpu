@@ -5,6 +5,8 @@ struct UiParams {
     pause: u32,
     brush_radius: f32,
     brush_mode: u32,
+    left_starting_pattern: u32, // 1 = circle 2 = square 3 = cleansheet
+    right_starting_pattern: u32,
 }
 
 @group(0) @binding(0)
@@ -71,7 +73,8 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
     let border_color = vec4<f32>(0.1, 0.1, 0.1, 1.0);
     let pause_color = vec4<f32>(0.7, 0.0, 0.1, 1.0);
     var bush_preview_color = vec4<f32>(0.7, 0.7, 0.4, 1.0);
-    let active_brush_mode_color = vec4<f32>(0.0, 1.0, 0.1, 1.0);
+    let active_brush_mode_color = vec4<f32>(0.2, 1.0, 0.0, 1.0);
+    var starting_patter_placholder = vec4<f32>(0.1, 0.01, 0.1, 1.0);
 
     // panel
     let panel_u_max = 1.0; let panel_u_min = u_ui_min;
@@ -153,6 +156,39 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
     // inside panel
     final_color = mix(final_color, panel_color, panel_switch);
     final_color += (panel_color * active_glow);
+
+    // starting pattern preview
+    let centers = array<vec2<f32>, 2>(
+        vec2<f32>(cu_left * screen_ratio, 0.75),
+        vec2<f32>(cu_right * screen_ratio, 0.75)
+    );
+
+    let patterns = array<u32, 2>(
+        u_ui.left_starting_pattern,
+        u_ui.right_starting_pattern
+    );
+
+    let r = 0.03;
+
+    for (var i = 0u; i < 2u; i++) {
+        let p = uv_corr - centers[i];
+        let pattern_type = patterns[i];
+        
+        // circle and square mask
+        let circ = 1.0 - circle_aa(r, length(p), aa);
+        let square = 1.0 - smoothstep(r, r + aa, max(abs(p.x), abs(p.y)));
+        
+        // Determine which mask to use based on the pattern type
+        var starting_patterm_mask = 0.0;
+        if (pattern_type == 1u) {
+            starting_patterm_mask = circ;
+        } else if (pattern_type == 2u) {
+            starting_patterm_mask = square;
+        }
+        
+        // Apply to final color
+        final_color = mix(final_color, starting_patter_placholder, starting_patterm_mask);
+    }
 
     // half the screen for brush settings
     if (uv.y < 0.51 && uv.y > 0.49) {
