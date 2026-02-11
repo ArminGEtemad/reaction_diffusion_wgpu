@@ -13,11 +13,16 @@ use wgpu::*;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-pub struct UiParams {
-    pub active_side: u32,
-    pub paused: u32,
-    pub brush_radius: f32,
-    pub mode: u32,
+struct UiParams {
+    active_side: u32,            // 4bytes
+    paused: u32,                 // 4bytes
+    brush_radius: f32,           // 4bytes
+    mode: u32,                   // 4bytes
+    left_starting_pattern: u32,  // 4bytes
+    right_starting_pattern: u32, // 4bytes
+    // 6 x 4 = 24 bytes
+    // needed padding for 32 bytes
+    _pad: [u32; 2],
 }
 
 pub struct UiOverlayNode {
@@ -41,6 +46,9 @@ impl UiOverlayNode {
             paused: 0,
             brush_radius: 0.0,
             mode: 0,
+            left_starting_pattern: 0,
+            right_starting_pattern: 0,
+            _pad: [0; 2],
         };
 
         let params_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -177,6 +185,9 @@ impl RenderNode for UiOverlayNode {
             paused: per_frame.paused as u32, // turning the boolean to u32
             brush_radius: per_frame.brush_radius,
             mode: per_frame.mode,
+            left_starting_pattern: per_frame.left_starting_pattern as u32,
+            right_starting_pattern: per_frame.right_starting_pattern as u32,
+            _pad: [0; 2],
         };
         gpu_res
             .queue
