@@ -200,11 +200,12 @@ pub struct SystemParamsUniform {
 }
 
 // different starting patterns
+#[repr(u32)]
 #[derive(Clone, Copy, Debug)]
 pub enum StartingPattern {
-    Circle,
-    Square,
-    CleanSheet,
+    Circle = 1,
+    Square = 2,
+    CleanSheet = 3,
 }
 
 // Communication between the system and GPU
