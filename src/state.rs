@@ -200,6 +200,8 @@ impl State {
             paused: input.paused,
             debug_mode: input.debug_mode,
             ui_active_side,
+            left_starting_pattern: input.current_starting_pattern_left,
+            right_starting_pattern: input.current_starting_pattern_right,
         };
 
         self.graph
