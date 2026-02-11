@@ -1,5 +1,6 @@
 use crate::{
     gpu_resources::{FrameContext, GpuResource},
+    rd_system::StartingPattern,
     render_graph::resource_registry::ResourceRegistry,
 };
 use std::any::Any;
@@ -12,6 +13,8 @@ pub struct PerFrameParameters {
     pub paused: bool,
     pub debug_mode: bool,
     pub ui_active_side: u32,
+    pub left_starting_pattern: StartingPattern,
+    pub right_starting_pattern: StartingPattern,
 }
 
 // Compute pass must always come before Render pass
