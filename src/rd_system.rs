@@ -172,13 +172,6 @@ pub struct SystemConfig {
     pub height: u32,
 }
 
-// For better mathematical stability
-// we can do N small simulation steps per frame
-pub struct SimulationParameters {
-    pub dt_per_step: f32,
-    pub substeps_per_frame: u32,
-}
-
 // time
 // this lives in group 0 binding 0 (RD shader)
 #[repr(C)] // format expected by the gpu
@@ -212,9 +205,6 @@ pub enum StartingPattern {
 pub struct ReactionDiffusionSystem {
     // config
     pub sys_config: SystemConfig,
-
-    // parameters
-    pub sim_parameters: SimulationParameters,
 
     // rd system parameters
     pub rd_sys_parameters: SystemParamsUniform,
@@ -258,13 +248,6 @@ impl ReactionDiffusionSystem {
         let time_uniform = TimeUniform {
             dt: 0.0,
             _pad: [0.0; 3],
-        };
-
-        // speed of the simulation
-        let sim_parameters = SimulationParameters {
-            // simulation is rendered as if dt_per_step x substeps_per_frame = dt
-            dt_per_step: 0.5,
-            substeps_per_frame: 5,
         };
 
         let start_instant = Instant::now();
@@ -404,8 +387,6 @@ impl ReactionDiffusionSystem {
         let self_package = Self {
             sys_config,
 
-            sim_parameters,
-
             rd_sys_parameters,
             rd_sys_uniform,
 
@@ -438,7 +419,7 @@ impl ReactionDiffusionSystem {
 
     fn update_time_uniform(&self, gpu_res: &GpuResource) {
         // time
-        let dt = self.sim_parameters.dt_per_step;
+        let dt = 0.5;
         let time_uniform = TimeUniform { dt, _pad: [0.0; 3] };
 
         gpu_res
@@ -556,6 +537,7 @@ impl ReactionDiffusionSystem {
     pub fn step_simulation(
         &mut self,
         gpu_res: &GpuResource,
+        substeps_per_frame: u32,
         frame: &mut FrameContext,
         paused: bool,
         ping_view: &TextureView,
@@ -568,9 +550,7 @@ impl ReactionDiffusionSystem {
 
         self.update_time_uniform(gpu_res);
 
-        let substeps = self.sim_parameters.substeps_per_frame.max(1);
-
-        for _ in 0..substeps {
+        for _ in 0..substeps_per_frame {
             self.single_step_sim(gpu_res, frame, ping_view, pong_view, temp_view);
         }
     }
