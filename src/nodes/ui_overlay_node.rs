@@ -20,9 +20,7 @@ struct UiParams {
     mode: u32,                   // 4bytes
     left_starting_pattern: u32,  // 4bytes
     right_starting_pattern: u32, // 4bytes
-    // 6 x 4 = 24 bytes
-    // needed padding for 32 bytes
-    _pad: [u32; 2],
+    simulation_speed: u32,       // 4bytes
 }
 
 pub struct UiOverlayNode {
@@ -48,7 +46,7 @@ impl UiOverlayNode {
             mode: 0,
             left_starting_pattern: 0,
             right_starting_pattern: 0,
-            _pad: [0; 2],
+            simulation_speed: 0,
         };
 
         let params_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -187,7 +185,7 @@ impl RenderNode for UiOverlayNode {
             mode: per_frame.mode,
             left_starting_pattern: per_frame.left_starting_pattern as u32,
             right_starting_pattern: per_frame.right_starting_pattern as u32,
-            _pad: [0; 2],
+            simulation_speed: per_frame.substeps_per_frame,
         };
         gpu_res
             .queue
