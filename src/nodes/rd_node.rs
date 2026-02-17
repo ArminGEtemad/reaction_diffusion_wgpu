@@ -164,6 +164,7 @@ impl RenderNode for ReactionDiffusionSimulationNode {
 
         self.rd_sim.step_simulation(
             gpu_res,
+            per_frame_parames.substeps_per_frame,
             frame,
             per_frame_parames.paused,
             &ping_view,
