@@ -27,6 +27,8 @@ fn main() {
     let _ = event_loop_m.run_app(&mut app);
 }
 
+const SUB_STEP_PERFRAME_MODES: [u32; 4] = [1, 5, 10, 20];
+
 struct InputState {
     mouse_pos: Option<(f32, f32)>,
     mouse_down: bool,
@@ -37,6 +39,8 @@ struct InputState {
     sim_side: Side,
     current_starting_pattern_left: StartingPattern,
     current_starting_pattern_right: StartingPattern,
+
+    substeps_per_frame: u32,
 }
 
 struct App {
@@ -68,6 +72,7 @@ impl Default for InputState {
             sim_side: Side::AllSides,
             current_starting_pattern_left: StartingPattern::Circle,
             current_starting_pattern_right: StartingPattern::Square,
+            substeps_per_frame: 1,
         }
     }
 }
@@ -153,6 +158,18 @@ impl ApplicationHandler for App {
                     return;
                 }
                 match event.physical_key {
+                    // control time
+                    PhysicalKey::Code(KeyCode::Space) => {
+                        // finde the index of the current time mode
+                        let mut idx = SUB_STEP_PERFRAME_MODES
+                            .iter()
+                            .position(|&m| m == self.input.substeps_per_frame)
+                            .unwrap();
+                        idx = (idx + 1) % SUB_STEP_PERFRAME_MODES.len();
+                        self.input.substeps_per_frame = SUB_STEP_PERFRAME_MODES[idx];
+                        println!("substeps_per_frame: {}", self.input.substeps_per_frame);
+                    }
+
                     PhysicalKey::Code(KeyCode::ArrowLeft) => {
                         self.input.sim_side = Side::Left;
                         println!("Reset side: Left");
