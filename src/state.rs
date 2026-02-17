@@ -202,6 +202,8 @@ impl State {
             ui_active_side,
             left_starting_pattern: input.current_starting_pattern_left,
             right_starting_pattern: input.current_starting_pattern_right,
+
+            substeps_per_frame: input.substeps_per_frame,
         };
 
         self.graph
