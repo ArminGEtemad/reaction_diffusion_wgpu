@@ -7,6 +7,7 @@ struct UiParams {
     brush_mode: u32,
     left_starting_pattern: u32, // 1 = circle 2 = square 3 = cleansheet
     right_starting_pattern: u32,
+    simulation_speed: u32,
 }
 
 @group(0) @binding(0)
@@ -37,6 +38,24 @@ fn circle_aa(radius: f32, dist: f32, smoothness: f32) -> f32 {
 // helper function to find centers
 fn center_finder(lim_0: f32, lim_1: f32) -> f32 {
     return (lim_0 + lim_1) * 0.5;
+}
+
+fn sdf_triangle(p: vec2<f32>) -> f32 {
+    // equilateral triangle of height 1
+    let k = vec3<f32>(0.8660254, -0.5, 0.57735027); // sqrt(3)/2, -1/2, 1/sqrt(3)
+
+    // warp the space
+    var p2 = p;
+    p2.x = abs(p2.x);
+
+    // signed distance
+    let d = max(dot(p2, k.xy), p2.y);
+    return d;
+}
+
+fn sdf_triangle_right(p: vec2<f32>) -> f32 {
+    // rotating the triangle
+    return sdf_triangle(vec2<f32>(p.y, -p.x));
 }
 
 @vertex
@@ -75,6 +94,7 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
     var bush_preview_color = vec4<f32>(0.7, 0.7, 0.4, 1.0);
     let active_brush_mode_color = vec4<f32>(0.2, 1.0, 0.0, 1.0);
     var starting_patter_placholder = vec4<f32>(0.1, 0.01, 0.1, 1.0);
+    let play_color = vec4<f32>(1.0, 1.0, 0.9, 1.0);
 
     // panel
     let panel_u_max = 1.0; let panel_u_min = u_ui_min;
@@ -190,6 +210,32 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
         final_color = mix(final_color, starting_patter_placholder, starting_patterm_mask);
     }
 
+    var n_icons = 1u;
+
+    if (u_ui.simulation_speed == 5u) {
+        n_icons = 2u;
+    } else if (u_ui.simulation_speed == 10u) {
+        n_icons = 3u;
+    } else if (u_ui.simulation_speed == 20u) {
+        n_icons = 4u;
+    }
+
+    let icon_spacing = -0.02; // controls horizontal offset
+
+    if (u_ui.pause != 1u) {
+        for (var i = 0u; i < n_icons; i = i + 1u) {
+
+            // Offset each triangle horizontally
+            let offset = vec2<f32>(f32(i) * icon_spacing, 0.0);
+
+            let p = uv_corr - vec2<f32>(0.95 * screen_ratio, 0.6) + offset;
+            let dist = sdf_triangle_right(p / 10.0);
+            let mask = 1.0 - smoothstep(0.0, aa, dist);
+
+            final_color = mix(final_color, play_color, mask);
+        }
+    }
+    
     // half the screen for brush settings
     if (uv.y < 0.51 && uv.y > 0.49) {
         final_color = vec4<f32>(0.0, 0.1, 0.1, 1.0);
