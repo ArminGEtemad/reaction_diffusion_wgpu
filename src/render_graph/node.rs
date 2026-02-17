@@ -15,6 +15,7 @@ pub struct PerFrameParameters {
     pub ui_active_side: u32,
     pub left_starting_pattern: StartingPattern,
     pub right_starting_pattern: StartingPattern,
+    pub substeps_per_frame: u32,
 }
 
 // Compute pass must always come before Render pass
