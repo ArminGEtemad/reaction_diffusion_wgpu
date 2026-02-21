@@ -1,75 +1,60 @@
 # Reaction Diffusion WGPU
 
+> version 1.0
+
 A GPU-accelerated reaction-diffusion simulator written in Rust using `wgpu` and `wgsl`.
+This is my first somewhat large project that is meant to learn more about `wgpu`, `wgsl`, render graphs, memory management and interactivity. I have tried to explain the math and what I wanted to do and why I designed this program this way [here in docs](docs). This program by default solves two systems reaction diffusion systems in a split-screen mode with default parameters:
 
-This project is part of an ongoing learning journey into compute shaders, real-time simulations, and graphics programming. The goal is to build a flexible simulation playground, explore visual patterns.
+| Parameters       | Left Screen | Right Screen |
+| ---------------- | ----------- | ------------ |
+| U diffusion rate | 0.16        | 0.2          |
+| V diffusion rate | 0.08        | 0.1          |
+| Feed             | 0.04        | 0.037        |
+| Kill             | 0.06        | 0.062        |
 
-## Third Focus
+These parameters can of course be modified in [State](src/state.rs). As of `version 1.0` these parameters must be changed before running the simulation. I am planning to change it in the future updates but I also want to focus on new projects now that I have learned a lot and have more experience.
 
-I want to work more on the code base and make it reusable for my future works (hopefully life doesn't get in the way).
-
-- [x] Render Graph
-  - I am not going to make a full engine. I just want to try get to a point that I can reuse my mini-engine. In the future projects, I can expand it and change it.
-- [x] More mathematical stability and accuracy
-  - I have the idea of making split screen where the user can look at the evolution of two system at the same time and so having a more stable algorith where the user can change the speed of the evolution without really messing up the accuracy sound nice. Which is the last point of focus here in this list
-- [x] the user can run multiple RD systems with different parameters at the same time as split screen
-- [x] post-processing phases with a view (maybe additional themes at some point?)
-- [ ] Add UI
-
-There are many stuff I want to add to have a fully interactive reaction diffusion system that feels fun to use and watch as patterns evolve.
-
-## Second Focus
-
-After the fist focus is done, I want to focus on what i planned.
-
-- [x] Hot reload (color map)
-- [x] Interactivity (Brush, Eraser, Pause, Play)
-- [x] Add different starting blob shapes / reset
-
-## First Focus
-
-- [x] Minimal wgpu app with full-screen quad
-- [x] GPU-based Gray-Scott compute shader
-- [x] Ping-pong texture simulation
-- [x] Real-time visualization via fragment shader
-
-When these are done, the focus is going to be interactivity, hotreload and maybe UI.
-
-## Requirements
-
-- Rust
-- A GPU that supports WebGPU (Vulkan, Metal, or DX12)
-
-## Screenshots and Gifs
-
-Two reaction diffusion system with different parameters run at the same time. The user can interact using the mouse. The mouse works like a brush and can add elements and also erase.
-
-<div style="display: flex; gap: 20px; align-items: flex-start;">
+<div style="display: flex; gap: 100px; align-items: flex-start;">
 
   <div>
-    <img src="docs/SplitScreenUpdates/splitscreen.gif" width="600"/>
+    <img src="docs/DemoPic.png" width="1000"/>
   </div>
 
 </div>
 
-In the split screen mode the user has control over sides independently. Using arrow keys, the user can restart and change the starting shape of the blob for each side.
+## Features
 
-<div style="display: flex; gap: 20px; align-items: flex-start;">
+- GPU compute pass implementing Gray–Scott reaction–diffusion
+- GPU compute pass implementing Lambert diffusion to make a fake 3D effect
+- Split screen simulation for parameter comparison
+- Real-time interactivity (brush, injection, erasing)
+- Parameterized initial conditions (Circle/Square/None)
+- Simple re-usable render graph pipeline with texture ping-pong
+- Adjustable simulation speed
 
-  <div>
-    <img src="docs/SplitScreenUpdates/side_choice.gif" width="600"/>
-  </div>
+Fully implemented in Rust + WGPU + WGSL
 
-</div>
+## How to run?
+
+You need to clone the project and use cargo to run it.
+
+> git clone https://github.com/ArminGEtemad/reaction_diffusion_wgpu.git
+>
+> cd reaction_diffusion_wgpu
+>
+> cargo run --release
 
 ## Interactivity
 
+While the simulations run, there are ways to interact with them.
+
 | Key         | What it does                              |
 | ----------- | ----------------------------------------- |
-| 1           | Add element V                             |
-| 2           | Add element U                             |
-| 0           | Erase                                     |
+| 1           | Add element V (left click)                |
+| 2           | Add element U (left click)                |
+| 0           | Erase (left click)                        |
 | p           | Pause/Play                                |
+| space       | controlling simulation speed              |
 | r           | Reset the simulation                      |
 | a           | Change the starting blob shape to Circle  |
 | b           | Change the starting blob shape to Square  |
@@ -79,6 +64,50 @@ In the split screen mode the user has control over sides independently. Using ar
 | right arrow | Select right side of split screen to edit |
 | up arrow    | Select both side of split screen to edit  |
 
-## Math and Design
+### Brush
 
-The math and everything I do will be explained in [here](docs). There I will explain what the ping-pong buffer is that I used. When I make the render graph, I explain why I decided to go this way with the project.
+Via mouse the user can inject substance V and U or even erase. The size of the brush can be changed useing the mouse wheel. Then the keys `1`, `2` and `0` change the mode of the brush. There is a minimal preview on the right side of the screen that shows the size of the brush and the current brush mode.
+
+<div style="display: flex; gap: 100px; align-items: flex-start;">
+
+  <div>
+    <img src="docs/brushDemo.gif" width="800"/>
+  </div>
+
+</div>
+
+### Split Screen
+
+Choosing which side of the split screen should be restarted and change its initial blub can be done using the arrow keys. Initially there is no blob (clean sheet state). The blob preview is shown on the right side though and can be triggered by restarting the simulation. There are only two blobs right now "Circle" and "Square".
+
+<div style="display: flex; gap: 100px; align-items: flex-start;">
+
+  <div>
+    <img src="docs/blubDemo.gif" width="800"/>
+  </div>
+
+</div>
+
+### Play/Pause
+
+The simulation can be played and paused using `p` key and the speed of the simulation can be modified with `space` key. The preview can again be seen on the right side.
+
+<div style="display: flex; gap: 100px; align-items: flex-start;">
+
+  <div>
+    <img src="docs/pausePlay.gif" width="800"/>
+  </div>
+
+</div>
+
+## Dependencies
+
+- winit 0.30.12
+- wgpu 25.0
+- pollster 0.4.0
+- bytemuck 1.24.0
+- notify 8.2.0
+
+## License
+
+This project is under [MIT License](LICENSE).
